@@ -1,0 +1,30 @@
+name: Master Deployment Review
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  security-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Structural Check
+        # Uses uvx to run ruff instantly.
+        # Selects logic errors (F) and basic syntax (E, W). Ignores line length (E501).
+        run: uvx ruff check . --select F,E,W --ignore E501
+
+      - name: Security Vulnerability Scan
+        # Uses uvx to run bandit.
+        # -ll and -ii ignore low-severity and low-confidence issues to prevent spam.
+        run: uvx bandit -r src/ -ll -ii
