@@ -1,0 +1,23 @@
+name: Development Code Review
+
+on:
+  pull_request:
+    branches:
+      - development
+
+jobs:
+  fast-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Pragmatic Code Check
+        # Uses uvx to run ruff instantly without modifying your environment
+        run: uvx ruff check . --select F,E,W --ignore E501
