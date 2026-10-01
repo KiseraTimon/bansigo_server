@@ -10,6 +10,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from pathlib import Path
 
+from config import Settings, get_settings
+from utilities import RequestContextMiddleware, setup_logging
+
 
 # path references
 path = Path(__file__)
@@ -25,8 +28,17 @@ def create_app() -> FastAPI:
     :return: FastAPI
     """
 
+    # app settings
+    settings: Settings = get_settings()
+    setup_logging(settings)
+
+
     # fastAPI object
     app = FastAPI()
+
+
+    # middleware for logs
+    app.add_middleware(RequestContextMiddleware)
 
 
     # mounting
