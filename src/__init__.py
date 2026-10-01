@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.exception_handlers import request_validation_exception_handler, http_exception_handler
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -105,6 +106,38 @@ def create_app() -> FastAPI:
                 "content": "an error occurred; kindly verify the information you sent in is correct"
             },
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+
+    # unexpected errors
+    @app.exception_handler(Exception)
+    async def unhandled_exceptions(request: Request):
+        """
+        handles internal server errors
+        :param request: Request
+        :return:
+        """
+        message = "Something went wrong on our side. Please try again later"
+        headers = {"X-Request-ID": getattr(request.state, "request_id", "-")}
+
+        # exceptions from apis
+        if request.url.path.startswith("/api") or not hasattr(app.state, "templates"):
+            return JSONResponse(
+                {"detail": message},
+                status_code=500,
+                headers=headers
+            )
+
+        # exceptions from views
+        return app.state.templates.TemplateResponse(
+            request,
+            "errors.html",
+            {
+                "status_code": 500,
+                "title": 500,
+                "content": message
+            },
+            status_code=500,
+            headers=headers
         )
 
 
