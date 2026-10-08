@@ -1,9 +1,11 @@
 # src/repositories/__init__.py
 
+
 from .user_repository import UserRepository
+from .token_repository import VerificationTokenRepository
 
 
-# exportable
 __all__ = [
-    "UserRepository"
+    "UserRepository",
+    "VerificationTokenRepository"
 ]
