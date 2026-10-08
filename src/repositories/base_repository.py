@@ -60,3 +60,13 @@ class BaseRepository(Generic[T]):
         self.db.add(instance)
         await self.db.flush()
         return instance
+
+
+    async def delete(self, instance: T) -> None:
+        """
+        deletes a record
+        :param instance: Typevar
+        :return: None
+        """
+        await self.db.delete(instance)
+        await self.db.flush()
