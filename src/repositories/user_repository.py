@@ -84,3 +84,18 @@ class UserRepository(BaseRepository[User]):
                 taken.add("phone")
 
         return taken
+
+
+    async def usernames_with_prefix(self, prefix: str) -> set[str]:
+        """
+        existing usernames starting with 'prefix'
+        :param prefix: str
+        :return: set[str]
+        """
+
+        stmt = (
+            select(User.username)
+            .where(User.username.startswith(prefix, autoescape=True))
+        )
+
+        return set((await self.db.execute(stmt)).scalars().all())
