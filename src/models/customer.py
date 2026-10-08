@@ -8,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from .base import TimestampMixin
 
+if TYPE_CHECKING:
+    from .user import User
+
 
 class Customer(Base, TimestampMixin):
     """

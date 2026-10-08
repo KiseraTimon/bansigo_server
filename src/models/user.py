@@ -10,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from .base import TimestampMixin, UTCDateTime, str_enum
 
+if TYPE_CHECKING:
+    from .customer import Customer
+
 
 # user roles
 class UserRole(enum.Enum):
@@ -52,6 +55,13 @@ class User(Base, TimestampMixin):
     # timestamp fields
     last_login: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+
+    # relationships
+    customer: Mapped[Optional["Customer"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False
+    )
 
     # indexes
     __table_args__ = (
