@@ -48,3 +48,15 @@ class BaseRepository(Generic[T]):
         }
 
         return list((await self.db.execute(stmt)).scalars().all())
+
+
+    async def add(self, instance: T) -> T:
+        """
+        stages a new row
+        :param instance: TypeVar
+        :return: TypeVar
+        """
+
+        self.db.add(instance)
+        await self.db.flush()
+        return instance
