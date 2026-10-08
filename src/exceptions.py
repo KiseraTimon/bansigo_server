@@ -58,6 +58,16 @@ class NotFoundError(AppError):
     default_detail = "Not found"
 
 
+class TooManyRequestsError(AppError):
+    """rate limit"""
+    default_status = 429
+    default_detail = "Too many requests"
+
+    def __init__(self, retry_after: int, detail: str | None = None):
+        super().__init__(detail, headers={"Retry-After": str(retry_after)})
+        self.retry_after = retry_after
+
+
 class ConflictError(AppError):
     """a unique field (username/email/phone) is already taken."""
     default_status = 409
