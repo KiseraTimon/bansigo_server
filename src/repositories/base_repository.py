@@ -21,6 +21,7 @@ class BaseRepository(Generic[T]):
         self.model = model
         self.db = db
 
+
     async def get_by_id(self, id: int) -> Optional[T]:
         """
         get a single record by id
@@ -29,3 +30,21 @@ class BaseRepository(Generic[T]):
         """
 
         return await self.db.get(self.model, id)
+
+
+    async def get_all(self, page: int = 1, per_page: int = 20) -> List[T]:
+        """
+        get all records with ordered pagination
+        :param page: int
+        :param per_page: int
+        :return: List[TypeVar] | Any
+        """
+
+        stmt = {
+            select(self.model)
+            .order_by(self.model.id)
+            .limit(per_page)
+            .offset((page - 1) * per_page)
+        }
+
+        return list((await self.db.execute(stmt)).scalars().all())
