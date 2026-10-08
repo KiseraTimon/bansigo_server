@@ -70,3 +70,11 @@ class BaseRepository(Generic[T]):
         """
         await self.db.delete(instance)
         await self.db.flush()
+
+
+    async def count(self) -> int:
+        """
+        counts total records
+        :return: int
+        """
+        return (await self.db.execute(select(func.count(self.model.id)))).scalar_one()
