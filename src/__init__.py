@@ -55,6 +55,8 @@ def create_app() -> FastAPI:
 
 
     # routers
+    from src.routers import router
+    app.include_router(router)
 
 
     # http exception handler
