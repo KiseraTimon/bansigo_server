@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from pathlib import Path
 
+from src.database import Base, engine
 from config import Settings, get_settings
 from utilities import RequestContextMiddleware, setup_logging
 
@@ -20,6 +21,19 @@ path = Path(__file__)
 STATIC_DIR = f"{path.resolve().parent}/static"
 MEDIA_DIR = f"{path.resolve().parent}/media"
 TEMPLATES_DIR = f"{path.resolve().parent}/templates"
+
+
+# database instance
+async def lifespan(app: FastAPI):
+    # startup
+    import src.models   # noqa: F401
+    async with engine.begin() as conn:
+        # idempotent database creation
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+    # shutdown
+    await engine.dispose()
 
 
 # app factory
@@ -55,6 +69,8 @@ def create_app() -> FastAPI:
 
 
     # routers
+    from src.routers import router
+    app.include_router(router)
 
 
     # http exception handler
@@ -82,6 +98,7 @@ def create_app() -> FastAPI:
             status_code=exception.status_code
         )
 
+
     # request validation exception handler
     @app.exception_handler(RequestValidationError)
     async def request_validation_exceptions(request: Request, exception: RequestValidationError):
@@ -107,6 +124,7 @@ def create_app() -> FastAPI:
             },
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
         )
+
 
     # unexpected errors
     @app.exception_handler(Exception)
