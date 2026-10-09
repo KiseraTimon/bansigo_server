@@ -10,6 +10,6 @@ dependencies = [
     "passlib>=1.7.4",
     "pathlib>=1.0.1",
     "pyjwt>=2.15.1",
-    "sqlalchemy>=2.1.1",
+    "sqlalchemy[asyncio]>=2.1.1",
     "uvicorn>=0.54.0",
 ]
