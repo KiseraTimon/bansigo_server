@@ -30,19 +30,15 @@ if TYPE_CHECKING:
     from .catalogue import Product
     from .customer import Customer
     from .delivery import Delivery
-    from .payment import Payment
     from .staff import Staff
 
 
 class OrderStatus(enum.Enum):
     """
-    where the order is in its life. Allowed moves (the service enforces them):
-
-      PENDING_PAYMENT -> CONFIRMED -> PREPARING -> READY -> OUT_FOR_DELIVERY -> COMPLETED
-      PICKUP orders skip OUT_FOR_DELIVERY:  READY -> COMPLETED
-      PENDING_PAYMENT / CONFIRMED / PREPARING -> CANCELLED   (not once it has left the shop)
+    order lifeline
     """
-    PENDING_PAYMENT = "pending_payment"    # created; waiting for the M-Pesa result (or cash is chosen: goes straight to CONFIRMED)
+
+    PENDING_PAYMENT = "pending_payment"    # created; waiting for the M-Pesa result; where cash is chosen, it goes straight to CONFIRMED
     CONFIRMED = "confirmed"                # paid (or cash accepted); stock is reserved
     PREPARING = "preparing"                # a picker is assembling it
     READY = "ready"                        # packed: waiting for a rider / for the customer to collect
@@ -53,9 +49,9 @@ class OrderStatus(enum.Enum):
 
 class OrderPaymentStatus(enum.Enum):
     """
-    cached summary of the order's payments, so lists can filter without joining.
-    the truth is the Payment rows; the payment service keeps this in step
+    cached summary of the order's payments
     """
+
     UNPAID = "unpaid"
     PAID = "paid"
     PARTIALLY_REFUNDED = "partially_refunded"
@@ -66,6 +62,7 @@ class PaymentMethod(enum.Enum):
     """
     what the customer CHOSE at checkout (a Payment row records how a payment actually happened)
     """
+
     MPESA = "mpesa"
     CASH = "cash"
 
@@ -85,13 +82,10 @@ class Order(Base, TimestampMixin):
     # primary key
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # public reference, max 12 characters: it is also sent to M-Pesa as the AccountReference,
-    # which is how an incoming payment is matched to this order. Make it random, not sequential,
-    # so strangers can't enumerate orders or guess how many you take (e.g. "BG7K3QX9M2")
+    # public reference
     order_number: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
 
-    # foreign keys. RESTRICT: customers are anonymised on deletion, never removed, so their
-    # orders (tax records) always keep a parent
+    # foreign keys
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
     address_id: Mapped[Optional[int]] = mapped_column(ForeignKey("addresses.id", ondelete="SET NULL"), nullable=True)
     assigned_picker_id: Mapped[Optional[int]] = mapped_column(ForeignKey("staff.id", ondelete="SET NULL"), nullable=True)
@@ -107,9 +101,7 @@ class Order(Base, TimestampMixin):
         str_enum(FulfilmentType), nullable=False, default=FulfilmentType.DELIVERY
     )
 
-    # client-generated key (the app creates one per checkout attempt). Mobile networks drop and
-    # retry requests; with this key a retried "place order" returns the SAME order instead of
-    # creating a second one (and a second STK push)
+    # client-generated key
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # money
@@ -119,12 +111,9 @@ class Order(Base, TimestampMixin):
     rounding_adjustment: Mapped[Decimal] = mapped_column(Money, nullable=False, default=0, server_default="0")
     total: Mapped[Decimal] = mapped_column(Money, nullable=False)           # what the customer is asked to pay
     tax_total: Mapped[Decimal] = mapped_column(Money, nullable=False, default=0, server_default="0")    # VAT CONTAINED in total (informational, for invoices)
-    # after picking, weighed goods can come out at a slightly different weight. M-Pesa cannot
-    # "authorise now, capture the real amount later", so the difference is settled by a refund
-    # (or a top-up). null until picking is finished
     adjusted_total: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
 
-    # delivery snapshot (copied from the Address; null for pickup)
+    # delivery snapshot
     delivery_recipient_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     delivery_recipient_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     delivery_address_text: Mapped[Optional[str]] = mapped_column(String(400), nullable=True)
@@ -141,8 +130,7 @@ class Order(Base, TimestampMixin):
     cancelled_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     cancel_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    # relationships (all lazy="raise": load what you need with selectinload(...) in the query,
-    # because lazy loading cannot work inside an async session)
+    # relationships
     customer: Mapped["Customer"] = relationship(back_populates="orders", lazy="raise")
     address: Mapped[Optional["Address"]] = relationship(lazy="raise")
     assigned_picker: Mapped[Optional["Staff"]] = relationship(lazy="raise")
@@ -153,7 +141,7 @@ class Order(Base, TimestampMixin):
         back_populates="order", cascade="all, delete-orphan", order_by="OrderStatusHistory.id", lazy="raise"
     )
     delivery: Mapped[Optional["Delivery"]] = relationship(back_populates="order", uselist=False, lazy="raise")
-    payments: Mapped[list["Payment"]] = relationship(back_populates="order", lazy="raise")
+    # payments: Mapped[list["Payment"]] = relationship(back_populates="order", lazy="raise")
 
     # constraints + indexes
     __table_args__ = (
@@ -182,6 +170,7 @@ class PickStatus(enum.Enum):
     """
     what happened when a picker went to the shelf for this line
     """
+
     PENDING = "pending"
     PICKED = "picked"
     SHORT = "short"                  # fewer than ordered were available
@@ -191,9 +180,7 @@ class PickStatus(enum.Enum):
 
 class OrderItem(Base):
     """
-    one product line on an order, with the price and name AS THEY WERE at checkout.
-    the set of products per order is exactly the "basket" the future Apriori / FP-Growth
-    recommender mines, so each product appears at most once per order
+    schematic properties of one product line on an order
     """
 
     __tablename__ = "order_items"
@@ -214,7 +201,7 @@ class OrderItem(Base):
     unit: Mapped[UnitType] = mapped_column(str_enum(UnitType), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Money, nullable=False)
     tax_class: Mapped[TaxClass] = mapped_column(str_enum(TaxClass), nullable=False)
-    tax_rate: Mapped[Decimal] = mapped_column(Rate, nullable=False, default=0, server_default="0")    # the % that applied that day
+    tax_rate: Mapped[Decimal] = mapped_column(Rate, nullable=False, default=0, server_default="0")
 
     # ordered vs picked
     quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
@@ -254,7 +241,7 @@ class OrderStatusHistory(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     changed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    # the change (from_status is null on the very first row)
+    # transition properties
     from_status: Mapped[Optional[OrderStatus]] = mapped_column(str_enum(OrderStatus), nullable=True)
     to_status: Mapped[OrderStatus] = mapped_column(str_enum(OrderStatus), nullable=False)
     note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
