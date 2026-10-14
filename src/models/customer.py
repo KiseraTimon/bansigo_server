@@ -9,6 +9,8 @@ from src.database import Base
 from .base import TimestampMixin
 
 if TYPE_CHECKING:
+    from .address import Address
+    from .order import Order
     from .user import User
 
 
@@ -32,6 +34,8 @@ class Customer(Base, TimestampMixin):
 
     # relationships
     user: Mapped["User"] = relationship(back_populates="customer")
+    addresses: Mapped[list["Address"]] = relationship(back_populates="customer", cascade="all, delete-orphan", lazy="raise")
+    orders: Mapped[list["Order"]] = relationship(back_populates="customer", lazy="raise")
 
     # constraints
     __table_args__ = (

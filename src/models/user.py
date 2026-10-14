@@ -11,7 +11,10 @@ from src.database import Base
 from .base import TimestampMixin, UTCDateTime, str_enum
 
 if TYPE_CHECKING:
+    from .admin import Admin
     from .customer import Customer
+    from .rider import Rider
+    from .staff import Staff
 
 
 # user roles
@@ -62,6 +65,9 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False
     )
+    rider: Mapped[Optional["Rider"]] = relationship(back_populates="user", uselist=False, lazy="raise", foreign_keys="Rider.user_id")
+    staff: Mapped[Optional["Staff"]] = relationship(back_populates="user", uselist=False, lazy="raise")
+    admin: Mapped[Optional["Admin"]] = relationship(back_populates="user", uselist=False, lazy="raise")
 
     # indexes
     __table_args__ = (
