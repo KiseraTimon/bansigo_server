@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .catalogue import Product
     from .customer import Customer
     from .delivery import Delivery
+    from .payment import Payment
     from .staff import Staff
 
 
@@ -141,7 +142,7 @@ class Order(Base, TimestampMixin):
         back_populates="order", cascade="all, delete-orphan", order_by="OrderStatusHistory.id", lazy="raise"
     )
     delivery: Mapped[Optional["Delivery"]] = relationship(back_populates="order", uselist=False, lazy="raise")
-    # payments: Mapped[list["Payment"]] = relationship(back_populates="order", lazy="raise")
+    payments: Mapped[list["Payment"]] = relationship(back_populates="order", lazy="raise")
 
     # constraints + indexes
     __table_args__ = (

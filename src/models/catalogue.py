@@ -11,6 +11,9 @@ from src.database import Base
 from .base import AuditMixin, str_enum
 from .types import Money, Quantity
 
+if TYPE_CHECKING:
+    from .inventory import Inventory
+
 
 class UnitType(enum.Enum):
     """
@@ -146,7 +149,7 @@ class Product(Base, AuditMixin):
     # relationships
     category: Mapped["Category"] = relationship(lazy="raise")
     brand: Mapped[Optional["Brand"]] = relationship(lazy="raise")
-    # inventory: Mapped[Optional["Inventory"]] = relationship(back_populates="product", uselist=False, lazy="raise")
+    inventory: Mapped[Optional["Inventory"]] = relationship(back_populates="product", uselist=False, lazy="raise")
 
     # constraints + indexes
     __table_args__ = (
