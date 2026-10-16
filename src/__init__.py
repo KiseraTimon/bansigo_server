@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
 
 
     # fastAPI object
-    app = FastAPI()
+    app = FastAPI(lifespan=lifespan)
 
 
     # middleware for logs
