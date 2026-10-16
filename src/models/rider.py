@@ -13,6 +13,7 @@ from .base import TimestampMixin, UTCDateTime, str_enum
 from .types import Coordinate
 
 if TYPE_CHECKING:
+    from .delivery import Delivery
     from .user import User
 
 
@@ -97,7 +98,7 @@ class Rider(Base, TimestampMixin):
 
     # relationships
     user: Mapped["User"] = relationship(back_populates="rider", foreign_keys=[user_id], lazy="raise")
-    # deliveries: Mapped[list["Delivery"]] = relationship(back_populates="rider", lazy="raise")
+    deliveries: Mapped[list["Delivery"]] = relationship(back_populates="rider", lazy="raise")
 
     # constraints + indexes
     __table_args__ = (
