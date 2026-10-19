@@ -1,14 +1,27 @@
 # src/repositories/customer_repository.py
 
-from typing import Optional, Iterable
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional, Iterable, NamedTuple
 
-from sqlalchemy import select, func, or_, update, values
+from sqlalchemy import select, func, or_, update, case
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import User
-from src.models import Customer
+from src.models import Customer, User, Order, OrderStatus, Address
 from .base_repository import BaseRepository
+
+
+class CustomerStats(NamedTuple):
+    """
+    summary of one customer's order history
+    """
+
+    order_count: int
+    completed_orders: int
+    lifetime_spend: Decimal
+    last_order_at: datetime | None
 
 
 class CustomerRepository(BaseRepository[Customer]):
@@ -253,3 +266,34 @@ class CustomerRepository(BaseRepository[Customer]):
         )
 
         return (await self.db.execute(stmt)).rowcount == 1
+
+
+    async def stats(self, customer_id: int) -> CustomerStats:
+        """
+        aggregates a data on customer's orders
+        :param customer_id: int
+        :return: CustomerStats
+        """
+
+        completed = Order.status == OrderStatus.COMPLETED
+        stmt = (
+            select(
+                func.count(Order.id),
+                func.count(case((completed, Order.id))),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (completed, func.coalesce(
+                                Order.adjusted_total,
+                                Order.total
+                            )), else_ = 0
+                        )
+                    ), 0
+                ),
+                func.max(Order.created_at),
+            )
+            .where(Order.customer_id == customer_id)
+        )
+
+        count, done, spend, last = (await self.db.execute(stmt)).one()
+        return CustomerStats(count, done, Decimal(spend), last)
