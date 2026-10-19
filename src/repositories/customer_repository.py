@@ -69,4 +69,23 @@ class CustomerRepository(BaseRepository[Customer]):
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
 
+    async def get_for_update(self, customer_id: int) -> Optional[Customer]:
+        """
+        this is a row-locked fetch.
+        I am implementing this to use before changing loyalty_points from a
+            read-modify-write path
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id == customer_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
 
