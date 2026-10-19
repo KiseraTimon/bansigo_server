@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Iterable, NamedTuple
 
-from sqlalchemy import select, func, or_, update, case
+from sqlalchemy import select, func, or_, update, case, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -297,3 +297,19 @@ class CustomerRepository(BaseRepository[Customer]):
 
         count, done, spend, last = (await self.db.execute(stmt)).one()
         return CustomerStats(count, done, Decimal(spend), last)
+
+
+    async def delete_addresses(self, customer_id: int) -> int:
+        """
+        method to remove a customer's saved addresses
+        :param customer_id: int
+        :return: int
+        """
+
+        stmt = (
+            delete(Address)
+            .where(Address.customer_id == customer_id)
+            .execution_options(synchronize_session = False)
+        )
+
+        return (await self.db.execute(stmt)).rowcount or 0
