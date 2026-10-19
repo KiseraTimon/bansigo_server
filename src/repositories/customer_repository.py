@@ -1,5 +1,9 @@
 # src/repositories/customer_repository.py
 
+"""
+this repository controls access to customer data
+"""
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Iterable, NamedTuple
