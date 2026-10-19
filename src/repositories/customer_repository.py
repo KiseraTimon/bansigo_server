@@ -91,7 +91,7 @@ class CustomerRepository(BaseRepository[Customer]):
 
     async def get_by_phone(self, phone: str) -> Optional[Customer]:
         """
-        finds a customer by the user phone  number.
+        finds a customer by the user phone number.
         Expects a normalized +2547xxxxxxxx number format
         :param phone: str
         :return: Customer | None
@@ -101,6 +101,23 @@ class CustomerRepository(BaseRepository[Customer]):
             select(Customer)
             .join(User, User.id == Customer.user_id)
             .where(User.phone == phone, User.deleted_at.is_(None))
+            .options(selectinload(Customer.user))
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_by_email(self, email: str) -> Optional[Customer]:
+        """
+        finds a customer by the user email
+        :param email: str
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .join(User, User.id == Customer.user_id)
+            .where(User.email ==  email, User.deleted_at.is_(None))
             .options(selectinload(Customer.user))
         )
 
