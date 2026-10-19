@@ -21,7 +21,7 @@ class CustomerRepository(BaseRepository[Customer]):
         super().__init__(Customer, db)
 
 
-    async def get_by_id(self, user_id: int, *, with_user: bool = False) -> Optional[Customer]:
+    async def get_by_user_id(self, user_id: int, *, with_user: bool = False) -> Optional[Customer]:
         """
         retrieves the customer profile that belongs to a user
         :param user_id: int
@@ -33,6 +33,22 @@ class CustomerRepository(BaseRepository[Customer]):
         if with_user:
             stmt = stmt.options(selectinload(Customer.user))
 
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_with_user(self, customer_id: int) -> Optional[Customer]:
+        """
+        a customer with their User loaded.
+        staff screens need the name/phone/email
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer).where(Customer.id == customer_id)
+            .options(selectinload(Customer.user))
+            .execution_options(populate_existing=True)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
 
