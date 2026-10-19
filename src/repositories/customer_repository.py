@@ -1,5 +1,9 @@
 # src/repositories/customer_repository.py
 
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import Customer
@@ -15,6 +19,21 @@ class CustomerRepository(BaseRepository[Customer]):
         :param db: AsyncSession
         """
         super().__init__(Customer, db)
+
+
+    async def get_by_id(self, user_id: int, *, with_user: bool = False) -> Optional[Customer]:
+        """
+        retrieves the customer profile that belongs to a user
+        :param user_id: int
+        :param with_user: bool
+        :return: Customer | None
+        """
+
+        stmt = select(Customer).where(Customer.user_id ==  user_id)
+        if with_user:
+            stmt = stmt.options(selectinload(Customer.user))
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
 
 
 
