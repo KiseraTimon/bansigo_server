@@ -2,7 +2,7 @@
 
 from typing import Optional, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -142,6 +142,22 @@ class CustomerRepository(BaseRepository[Customer]):
         )
 
         return list((await self.db.execute(stmt)).scalars().all())
+
+
+    async def exists_for_user(self, user_id: int) -> bool:
+        """
+        checks if the user already has a customer profile
+        :param user_id: int
+        :return: bool
+        """
+
+        stmt = (
+            select(func.count())
+            .select_from(Customer)
+            .where(Customer.user_id == user_id)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one() > 0
 
 
 
