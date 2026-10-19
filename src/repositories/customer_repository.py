@@ -235,3 +235,21 @@ class CustomerRepository(BaseRepository[Customer]):
         )
 
         return (await self.db.execute(stmt)).rowcount == 1
+
+
+    async def set_premium(self, customer_id: int, value: bool) -> bool:
+        """
+        activates premium accounts
+        :param customer_id: int
+        :param value: bool
+        :return: bool
+        """
+
+        stmt = (
+            update(Customer)
+            .where(Customer.id == customer_id)
+            .values(is_premium = value)
+            .execution_options(synchronize_session = False)
+        )
+
+        return (await self.db.execute(stmt)).rowcount == 1
