@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models import User
 from src.models import Customer
 from .base_repository import BaseRepository
 
@@ -83,6 +84,24 @@ class CustomerRepository(BaseRepository[Customer]):
             .where(Customer.id == customer_id)
             .with_for_update()
             .execution_options(populate_existing=True)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_by_phone(self, phone: str) -> Optional[Customer]:
+        """
+        finds a customer by the user phone  number.
+        Expects a normalized +2547xxxxxxxx number format
+        :param phone: str
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .join(User, User.id == Customer.user_id)
+            .where(User.phone == phone, User.deleted_at.is_(None))
+            .options(selectinload(Customer.user))
         )
 
         return (await self.db.execute(stmt)).scalar_one_or_none()
