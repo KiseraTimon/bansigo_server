@@ -2,7 +2,7 @@
 
 from typing import Optional, Iterable
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update, values
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -218,6 +218,20 @@ class CustomerRepository(BaseRepository[Customer]):
         return list((await self.db.execute(stmt)).scalars().all()), total
 
 
+    async def adjust_loyalty_points(self, customer_id: int, delta: int) -> bool:
+        """
+        atomically adds/removes points.
+        this is to prevent two concurrent orders from losing an update
+        :param customer_id:
+        :param delta:
+        :return:
+        """
 
+        stmt = (
+            update(Customer)
+            .where(Customer.id == customer_id, Customer.loyalty_points + delta > 0)
+            .values(loyalty_points=Customer.loyalty_points + delta)
+            .execution_options(synchronize_session = False)
+        )
 
-
+        return (await self.db.execute(stmt)).rowcount == 1
