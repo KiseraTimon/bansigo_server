@@ -2,7 +2,7 @@
 
 from typing import Optional, Iterable
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -158,6 +158,66 @@ class CustomerRepository(BaseRepository[Customer]):
         )
 
         return (await self.db.execute(stmt)).scalar_one() > 0
+
+
+    async def search(
+            self,
+            *,
+            q: str | None = None,   # query [matches name, username, email or phone]
+            is_premium: bool | None = None,
+            is_active: bool | None = None,
+            page: int = 1,
+            per_page: int = 20,
+    ) -> tuple[list[Customer], int]:
+        """
+        method retrieving a paginated customer list for the back office.
+        It does not include soft-deleted accounts
+        :param q: str | None
+        :param is_premium: bool | None
+        :param is_active: bool | None
+        :param page: int
+        :param per_page: int
+        :return: Customer, int
+        """
+
+        base = (
+            select(Customer)
+            .join(User, User.id ==  Customer.user_id)
+            .where(User.deleted_at.is_(None))
+        )
+
+        if q:
+            base = base.where(or_(
+                User.first_name.icontains(q, autoescape = True),
+                User.last_name.icontains(q, autoescape = True),
+                User.username.icontains(q, autoescape = True),
+                User.email.icontains(q, autoescape = True),
+                User.phone.icontains(q, autoescape = True),
+            ))
+
+        if is_premium is not None:
+            base = base.where(Customer.is_premium.is_(is_premium))
+
+        if is_active is not None:
+            base = base.where(User.is_active.is_(is_active))
+
+        total = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(base.order_by(None).subquery())
+            )
+        ).scalar_one_or_none()
+
+        stmt = (
+            base.options(selectinload(Customer.user))
+            .order_by(Customer.id.desc())
+            .limit(per_page)
+            .offset((page - 1) * per_page)
+        )
+
+        return list((await self.db.execute(stmt)).scalars().all()), total
+
+
 
 
 
