@@ -52,4 +52,21 @@ class CustomerRepository(BaseRepository[Customer]):
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
 
+    async def get_with_addresses(self, customer_id: int) -> Optional[Customer]:
+        """
+        loads a customer's address book, and the address's delivery zone
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id == customer_id)
+            .options(selectinload(Customer.user))
+            .execution_options(populate_existing=True)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
 
