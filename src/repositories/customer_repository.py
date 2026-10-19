@@ -1,6 +1,6 @@
 # src/repositories/customer_repository.py
 
-from typing import Optional
+from typing import Optional, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -122,6 +122,26 @@ class CustomerRepository(BaseRepository[Customer]):
         )
 
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_many(self, ids: Iterable[int]) -> list[Customer]:
+        """
+        retrieves many customers at once, with their associated user profiles
+        :param ids: Iterable[int]
+        :return: list[Customer]
+        """
+
+        ids = list(ids)
+        if not ids:
+            return []
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id.in_(ids))
+            .options(selectinload(Customer.user))
+        )
+
+        return list((await self.db.execute(stmt)).scalars().all())
 
 
 
