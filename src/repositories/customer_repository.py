@@ -1,9 +1,30 @@
 # src/repositories/customer_repository.py
 
-from sqlalchemy.ext.asyncio import AsyncSession
+"""
+this repository controls access to customer data
+"""
 
-from src.models import Customer
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional, Iterable, NamedTuple
+
+from sqlalchemy import select, func, or_, update, case, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from src.models import Customer, User, Order, OrderStatus, Address
 from .base_repository import BaseRepository
+
+
+class CustomerStats(NamedTuple):
+    """
+    summary of one customer's order history
+    """
+
+    order_count: int
+    completed_orders: int
+    lifetime_spend: Decimal
+    last_order_at: datetime | None
 
 
 class CustomerRepository(BaseRepository[Customer]):
@@ -17,4 +38,281 @@ class CustomerRepository(BaseRepository[Customer]):
         super().__init__(Customer, db)
 
 
+    async def get_by_user_id(self, user_id: int, *, with_user: bool = False) -> Optional[Customer]:
+        """
+        retrieves the customer profile that belongs to a user
+        :param user_id: int
+        :param with_user: bool
+        :return: Customer | None
+        """
 
+        stmt = select(Customer).where(Customer.user_id ==  user_id)
+        if with_user:
+            stmt = stmt.options(selectinload(Customer.user))
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_with_user(self, customer_id: int) -> Optional[Customer]:
+        """
+        a customer with their User loaded.
+        staff screens need the name/phone/email
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer).where(Customer.id == customer_id)
+            .options(selectinload(Customer.user))
+            .execution_options(populate_existing=True)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_with_addresses(self, customer_id: int) -> Optional[Customer]:
+        """
+        loads a customer's address book, and the address's delivery zone
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id == customer_id)
+            .options(selectinload(Customer.user))
+            .execution_options(populate_existing=True)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_for_update(self, customer_id: int) -> Optional[Customer]:
+        """
+        this is a row-locked fetch.
+        I am implementing this to use before changing loyalty_points from a
+            read-modify-write path
+        :param customer_id: int
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id == customer_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_by_phone(self, phone: str) -> Optional[Customer]:
+        """
+        finds a customer by the user phone number.
+        Expects a normalized +2547xxxxxxxx number format
+        :param phone: str
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .join(User, User.id == Customer.user_id)
+            .where(User.phone == phone, User.deleted_at.is_(None))
+            .options(selectinload(Customer.user))
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_by_email(self, email: str) -> Optional[Customer]:
+        """
+        finds a customer by the user email
+        :param email: str
+        :return: Customer | None
+        """
+
+        stmt = (
+            select(Customer)
+            .join(User, User.id == Customer.user_id)
+            .where(User.email ==  email, User.deleted_at.is_(None))
+            .options(selectinload(Customer.user))
+        )
+
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def get_many(self, ids: Iterable[int]) -> list[Customer]:
+        """
+        retrieves many customers at once, with their associated user profiles
+        :param ids: Iterable[int]
+        :return: list[Customer]
+        """
+
+        ids = list(ids)
+        if not ids:
+            return []
+
+        stmt = (
+            select(Customer)
+            .where(Customer.id.in_(ids))
+            .options(selectinload(Customer.user))
+        )
+
+        return list((await self.db.execute(stmt)).scalars().all())
+
+
+    async def exists_for_user(self, user_id: int) -> bool:
+        """
+        checks if the user already has a customer profile
+        :param user_id: int
+        :return: bool
+        """
+
+        stmt = (
+            select(func.count())
+            .select_from(Customer)
+            .where(Customer.user_id == user_id)
+        )
+
+        return (await self.db.execute(stmt)).scalar_one() > 0
+
+
+    async def search(
+            self,
+            *,
+            q: str | None = None,   # query [matches name, username, email or phone]
+            is_premium: bool | None = None,
+            is_active: bool | None = None,
+            page: int = 1,
+            per_page: int = 20,
+    ) -> tuple[list[Customer], int]:
+        """
+        method retrieving a paginated customer list for the back office.
+        It does not include soft-deleted accounts
+        :param q: str | None
+        :param is_premium: bool | None
+        :param is_active: bool | None
+        :param page: int
+        :param per_page: int
+        :return: Customer, int
+        """
+
+        base = (
+            select(Customer)
+            .join(User, User.id ==  Customer.user_id)
+            .where(User.deleted_at.is_(None))
+        )
+
+        if q:
+            base = base.where(or_(
+                User.first_name.icontains(q, autoescape = True),
+                User.last_name.icontains(q, autoescape = True),
+                User.username.icontains(q, autoescape = True),
+                User.email.icontains(q, autoescape = True),
+                User.phone.icontains(q, autoescape = True),
+            ))
+
+        if is_premium is not None:
+            base = base.where(Customer.is_premium.is_(is_premium))
+
+        if is_active is not None:
+            base = base.where(User.is_active.is_(is_active))
+
+        total = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(base.order_by(None).subquery())
+            )
+        ).scalar_one_or_none()
+
+        stmt = (
+            base.options(selectinload(Customer.user))
+            .order_by(Customer.id.desc())
+            .limit(per_page)
+            .offset((page - 1) * per_page)
+        )
+
+        return list((await self.db.execute(stmt)).scalars().all()), total
+
+
+    async def adjust_loyalty_points(self, customer_id: int, delta: int) -> bool:
+        """
+        atomically adds/removes points.
+        this is to prevent two concurrent orders from losing an update
+        :param customer_id:
+        :param delta:
+        :return:
+        """
+
+        stmt = (
+            update(Customer)
+            .where(Customer.id == customer_id, Customer.loyalty_points + delta > 0)
+            .values(loyalty_points=Customer.loyalty_points + delta)
+            .execution_options(synchronize_session = False)
+        )
+
+        return (await self.db.execute(stmt)).rowcount == 1
+
+
+    async def set_premium(self, customer_id: int, value: bool) -> bool:
+        """
+        activates premium accounts
+        :param customer_id: int
+        :param value: bool
+        :return: bool
+        """
+
+        stmt = (
+            update(Customer)
+            .where(Customer.id == customer_id)
+            .values(is_premium = value)
+            .execution_options(synchronize_session = False)
+        )
+
+        return (await self.db.execute(stmt)).rowcount == 1
+
+
+    async def stats(self, customer_id: int) -> CustomerStats:
+        """
+        aggregates a data on customer's orders
+        :param customer_id: int
+        :return: CustomerStats
+        """
+
+        completed = Order.status == OrderStatus.COMPLETED
+        stmt = (
+            select(
+                func.count(Order.id),
+                func.count(case((completed, Order.id))),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (completed, func.coalesce(
+                                Order.adjusted_total,
+                                Order.total
+                            )), else_ = 0
+                        )
+                    ), 0
+                ),
+                func.max(Order.created_at),
+            )
+            .where(Order.customer_id == customer_id)
+        )
+
+        count, done, spend, last = (await self.db.execute(stmt)).one()
+        return CustomerStats(count, done, Decimal(spend), last)
+
+
+    async def delete_addresses(self, customer_id: int) -> int:
+        """
+        method to remove a customer's saved addresses
+        :param customer_id: int
+        :return: int
+        """
+
+        stmt = (
+            delete(Address)
+            .where(Address.customer_id == customer_id)
+            .execution_options(synchronize_session = False)
+        )
+
+        return (await self.db.execute(stmt)).rowcount or 0
