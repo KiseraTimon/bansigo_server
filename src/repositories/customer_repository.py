@@ -5,10 +5,9 @@ from decimal import Decimal
 from typing import Optional, Iterable, NamedTuple
 
 from sqlalchemy import select, func, or_, update, case, delete
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from models import User
 from src.models import Customer, User, Order, OrderStatus, Address
 from .base_repository import BaseRepository
 
