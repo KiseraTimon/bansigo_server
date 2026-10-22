@@ -15,16 +15,15 @@ Daraja facts this relies on:
 import asyncio
 import base64
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import httpx
 
 from config import Settings
 
-EAT = ZoneInfo("Africa/Nairobi")
+EAT = timezone(timedelta(hours=3), "EAT")
 
 _BASES = {
     "sandbox": "https://sandbox.safaricom.co.ke",
