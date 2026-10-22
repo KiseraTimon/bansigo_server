@@ -74,3 +74,23 @@ class ConflictError(AppError):
 
     def __init__(self, fields: Iterable[str]):
         super().__init__(f"{', '.join(sorted(fields))} already in use")
+
+
+# trade-domain errors
+class BusinessRuleError(AppError):
+    """the request is valid but the current state of the record forbids it (409)"""
+    default_status = 409
+    default_detail = "This action is not allowed in the current state"
+
+
+class InsufficientStockError(BusinessRuleError):
+    """one or more lines cannot be covered by available stock"""
+
+    def __init__(self, product_names: Iterable[str]):
+        super().__init__(f"Not enough stock for: {', '.join(sorted(product_names))}")
+
+
+class ProviderError(AppError):
+    """an upstream provider (Daraja) failed or is unreachable (502)"""
+    default_status = 502
+    default_detail = "The payment provider is unavailable. Please try again"
