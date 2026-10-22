@@ -1,21 +1,26 @@
 # src/dependencies.py
 
+import hmac
+from functools import lru_cache
 from typing import Annotated
 
 import jwt
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import Settings, get_settings
 from src.database import get_db
 from src.exceptions import ForbiddenError, UnauthorizedError
-from src.repositories import UserRepository
+from src.models import Customer, User, UserRole
+from src.repositories import CustomerRepository, UserRepository
 from src.security import decode_access_token
-from src.models import User, UserRole
-from src.services import AuthService, UserService, VerificationService
+from src.services import (
+    AddressService, AuthService, CatalogueService, DeliveryService, InventoryService, OrderService,
+    PaymentService, RefundService, RiderService, UserService, VerificationService,
+)
 
-from utilities import Mailer
+from utilities import Mailer, MpesaClient
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -23,6 +28,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
+# service factories
 def get_auth_service(settings: SettingsDep, db: DbSession) -> AuthService:
     return AuthService(db, settings)
 
@@ -39,6 +45,50 @@ def get_mailer(settings: SettingsDep) -> Mailer:
     return Mailer(settings)
 
 
+def get_catalogue_service(db: DbSession) -> CatalogueService:
+    return CatalogueService(db)
+
+
+def get_inventory_service(db: DbSession) -> InventoryService:
+    return InventoryService(db)
+
+
+def get_address_service(db: DbSession) -> AddressService:
+    return AddressService(db)
+
+
+def get_order_service(settings: SettingsDep, db: DbSession) -> OrderService:
+    return OrderService(db, settings)
+
+
+def get_refund_service(db: DbSession) -> RefundService:
+    return RefundService(db)
+
+
+def get_rider_service(db: DbSession) -> RiderService:
+    return RiderService(db)
+
+
+def get_delivery_service(settings: SettingsDep, db: DbSession) -> DeliveryService:
+    return DeliveryService(db, settings)
+
+
+@lru_cache
+def get_mpesa_client() -> MpesaClient:
+    """
+    ONE client per process: it caches the Daraja OAuth token and keeps a connection pool.
+    Close it on shutdown (see lifespan in src/__init__.py)
+    """
+    return MpesaClient(get_settings())
+
+
+def get_payment_service(
+    settings: SettingsDep, db: DbSession, mpesa: Annotated[MpesaClient, Depends(get_mpesa_client)]
+) -> PaymentService:
+    return PaymentService(db, settings, mpesa)
+
+
+# authentication
 async def get_current_user(
         token: Annotated[str, Depends(oauth2_scheme)],
         settings: SettingsDep,
@@ -72,6 +122,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def require_roles(*roles: UserRole):
     """
     role gate for child models
+    usage: user: Annotated[User, Depends(require_roles(UserRole.STAFF, UserRole.ADMIN))]
     :param roles: UserRole
     :return:
     """
@@ -87,3 +138,39 @@ def require_roles(*roles: UserRole):
         return user
 
     return checker
+
+
+async def get_current_customer(
+    user: Annotated[User, Depends(require_roles(UserRole.CUSTOMER))], db: DbSession
+) -> Customer:
+    """
+    the Customer profile row behind a CUSTOMER user (orders, addresses and payments hang off it, not off User)
+    """
+    customer = await CustomerRepository(db).get_by_user_id(user.id)
+    if customer is None:
+        raise ForbiddenError("This account has no customer profile")
+    return customer
+
+
+CurrentCustomer = Annotated[Customer, Depends(get_current_customer)]
+
+
+# Daraja callbacks (no user logs in: these requests come from Safaricom)
+def verify_callback_secret(secret: str, settings: SettingsDep) -> None:
+    """
+    Daraja cannot sign its callbacks, so the URL we register carries a long random token:
+        https://api.example.com/api/payments/mpesa/{secret}/stk
+    A wrong token is a 404 (no hint that the route exists). Combine with the source-IP allowlist in PaymentService.
+    """
+    expected = settings.mpesa_callback_secret.get_secret_value() if settings.mpesa_callback_secret else ""
+    if not expected or not hmac.compare_digest(secret, expected):
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+
+def get_source_ip(request: Request) -> str | None:
+    """
+    the caller's address for the allowlist.
+    Behind Cloudflare the real client is in CF-Connecting-IP. Only trust that header if the origin is reachable
+    ONLY through Cloudflare, otherwise anyone can forge it.
+    """
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else None)
