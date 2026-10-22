@@ -24,7 +24,7 @@ from src.repositories import RiderRepository
 from src.schemas import RiderApply, RiderGoStatus, RiderLocation
 from utilities import utc_now
 
-from services.audit_service import AuditService
+from .audit_service import AuditService
 
 
 class RiderService:

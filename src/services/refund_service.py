@@ -22,7 +22,7 @@ from src.models import Order, OrderPaymentStatus, PaymentChannel, Refund, Refund
 from src.repositories import PaymentRepository, RefundRepository
 from utilities import get_logger, utc_now
 
-from services.audit_service import AuditService
+from .audit_service import AuditService
 
 log = get_logger(__name__)
 

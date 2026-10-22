@@ -37,7 +37,7 @@ from src.repositories import PaymentEventRepository, PaymentRepository
 from src.schemas import C2BAck, C2BNotification, StkCallbackEnvelope, StkPushRequest
 from utilities import EAT, STILL_PROCESSING, MpesaClient, MpesaError, get_logger, utc_now
 
-from services.order_service import OrderService, payable_amount
+from .order_service import OrderService, payable_amount
 from .refund_service import RefundService
 
 log = get_logger(__name__)

@@ -19,7 +19,7 @@ from src.schemas import (
 )
 from utilities import slugify
 
-from services.audit_service import AuditService
+from .audit_service import AuditService
 
 # changes to these are audited (money and tax treatment)
 _AUDITED_PRODUCT_FIELDS = ("price", "compare_at_price", "cost_price", "tax_class", "is_active")

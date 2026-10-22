@@ -38,7 +38,7 @@ from src.security import make_handover_code
 from utilities import ZERO, get_logger, money, utc_now, vat_contained, whole_shillings
 
 from .audit_service import AuditService
-from dump.inventory_service import InventoryService
+from .inventory_service import InventoryService
 from .refund_service import RefundService
 
 log = get_logger(__name__)

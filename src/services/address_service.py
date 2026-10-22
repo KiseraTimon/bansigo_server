@@ -15,7 +15,7 @@ from src.models import Address, Customer, DeliveryZone
 from src.repositories import AddressRepository, DeliveryZoneRepository
 from src.schemas import AddressCreate, AddressUpdate, DeliveryZoneCreate, DeliveryZoneUpdate
 
-from dump.services.audit_service import AuditService
+from .audit_service import AuditService
 
 MAX_ADDRESSES_PER_CUSTOMER = 10
 

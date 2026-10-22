@@ -1,5 +1,6 @@
 # config/settings.py
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -86,6 +87,29 @@ class Settings(BaseSettings):
     require_verified_email: bool = False
 
 
+    # shop configurations
+    vat_standard_rate: Decimal = Field(Decimal("16.00"), ge=0, le=100)     # percent, prices are VAT-inclusive
+    unpaid_order_ttl_minutes: int = Field(15, gt=0)                        # M-Pesa orders unpaid after this are expired
+    rider_fee_share: Decimal = Field(Decimal("0.70"), ge=0, le=1)          # share of the delivery fee paid to the rider (DECISION NEEDED)
+    handover_code_length: int = Field(4, ge=4, le=8)
+    handover_max_attempts: int = Field(5, gt=0)
+
+
+    # M-Pesa (Daraja) configurations
+    mpesa_env: Literal["sandbox", "production"] = "sandbox"
+    mpesa_consumer_key: SecretStr | None = None
+    mpesa_consumer_secret: SecretStr | None = None
+    mpesa_shortcode: str = ""                       # paybill number or till (store) number
+    mpesa_party_b: str | None = None                # the till number for Buy Goods; defaults to the shortcode
+    mpesa_passkey: SecretStr | None = None
+    mpesa_transaction_type: Literal["CustomerPayBillOnline", "CustomerBuyGoodsOnline"] = "CustomerPayBillOnline"
+    mpesa_callback_url: str = ""                    # the PUBLIC https URL of the STK callback, secret token included
+    mpesa_callback_secret: SecretStr | None = Field(default=None, min_length=24)
+    mpesa_callback_ips: list[str] = []              # Safaricom's published source IPs; empty disables the check (sandbox)
+    mpesa_stk_window_seconds: int = Field(90, gt=0) # how long a prompt is considered live before the sweeper steps in
+    mpesa_http_timeout: float = Field(15.0, gt=0)
+
+
     # logging configurations
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_dir: Path = Path("logs")
@@ -112,6 +136,15 @@ class Settings(BaseSettings):
 
             if self.mail_suppress_send:
                 raise ValueError("MAIL_SUPPRESS_SEND must be false when APP_ENV=production")
+
+        # live money must never run with unauthenticated callbacks
+        if self.mpesa_env == "production":
+            if not self.mpesa_callback_secret:
+                raise ValueError("MPESA_CALLBACK_SECRET is required when MPESA_ENV=production")
+            if not self.mpesa_callback_ips:
+                raise ValueError("MPESA_CALLBACK_IPS is required when MPESA_ENV=production")
+            if not self.mpesa_callback_url.startswith("https://"):
+                raise ValueError("MPESA_CALLBACK_URL must be https when MPESA_ENV=production")
 
         return self
 
@@ -182,4 +215,3 @@ def get_settings() -> Settings:
     """
 
     return Settings()
-
