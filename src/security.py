@@ -1,5 +1,7 @@
 # src/security.py
 
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -31,12 +33,13 @@ def verify_password(password: str, password_hash: str) -> bool:
     """
     return _pwd_context.verify(password, password_hash)
 
-def needs_rehash(password_hash: str) -> str:
+def needs_rehash(password_hash: str) -> bool:
     """
     synchronously validates if hashes are outdated
     :param password_hash: str
     :return: bool
     """
+    # FIX: the annotation said `-> str`; passlib's needs_update returns a bool
     return _pwd_context.needs_update(password_hash)
 
 
@@ -94,3 +97,20 @@ def decode_access_token(token: str, secret: str) -> dict:
         algorithms=[JWT_ALGORITHM],
         options={"require": ["exp", "sub"]}
     )
+
+
+# delivery handover
+
+def make_handover_code(secret: str, delivery_id: int, length: int = 4) -> str:
+    """
+    the short code a customer reads to the rider at the door (proof the right person received the parcel).
+
+    Derived from the server secret + delivery id instead of stored, so the customer app can show it again at any
+    time and nothing has to be sent over SMS. The rider never sees it: they only type what the customer tells them.
+    :param secret: str
+    :param delivery_id: int
+    :param length: int
+    :return: str
+    """
+    digest = hmac.new(secret.encode(), f"handover:{delivery_id}".encode(), hashlib.sha256).digest()
+    return f"{int.from_bytes(digest[:8], 'big') % (10 ** length):0{length}d}"
