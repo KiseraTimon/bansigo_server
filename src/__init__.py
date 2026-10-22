@@ -25,14 +25,17 @@ TEMPLATES_DIR = f"{path.resolve().parent}/templates"
 
 # database instance
 async def lifespan(app: FastAPI):
-    # startup
+    # db startup
     import src.models   # noqa: F401
     async with engine.begin() as conn:
         # idempotent database creation
         await conn.run_sync(Base.metadata.create_all)
     yield
 
-    # shutdown
+    # shutdowns
+    from src.dependencies import get_mpesa_client
+    if get_mpesa_client.cache_info().currsize:
+        await get_mpesa_client().aclose()
     await engine.dispose()
 
 
@@ -128,7 +131,7 @@ def create_app() -> FastAPI:
 
     # unexpected errors
     @app.exception_handler(Exception)
-    async def unhandled_exceptions(request: Request):
+    async def unhandled_exceptions(request: Request, exception: Exception):
         """
         handles internal server errors
         :param request: Request
