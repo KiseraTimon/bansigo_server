@@ -82,3 +82,56 @@ class CategoryRepository(BaseRepository[Category]):
         )
 
         return ((await self.db.execute(children)).scalar_one() + (await self.db.execute(products)).scalar_one()) > 0
+
+
+class BrandRepository(BaseRepository[Brand]):
+    def __init__(self, db: AsyncSession):
+        """
+        constructor
+        :param db: AsyncSession
+        """
+
+        super().__init__(Brand, db)
+
+
+    async def list_all(self, active_only: bool = True) -> list[Brand]:
+        """
+        fetches a list of all brands
+        :param active_only: bool
+        :return: list[Brand]
+        """
+
+        stmt = select(Brand).order_by(Brand.name)
+        if active_only:
+            stmt = stmt.where(Brand.is_active.is_(True))
+        return list((await self.db.execute(stmt)).scalars().all())
+
+
+    async def conflicting_fields(self, *, name: str | None, slug: str | None, exclude_id: int | None = None) -> set[str]:
+        """
+        checks for conflicting brand fields
+        :param name: str | None
+        :param slug: str | None
+        :param exclude_id: int | None
+        :return: set[str]
+        """
+
+        conditions = []
+        if name:
+            conditions.append(Brand.name == name)
+        if slug:
+            conditions.append(Brand.slug == slug)
+        if not conditions:
+            return set()
+
+        stmt = select(Brand.name, Brand.slug).where(or_(*conditions))
+        if exclude_id is not None:
+            stmt = stmt.where(Brand.id != exclude_id)
+
+        taken: set[str] = set()
+        for row_name, row_slug in (await self.db.execute(stmt)).all():
+            if name and row_name == name:
+                taken.add("name")
+            if slug and row_slug == slug:
+                taken.add("slug")
+        return taken
