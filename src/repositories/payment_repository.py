@@ -58,3 +58,45 @@ class PaymentRepository(BaseRepository[Payment]):
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+
+class PaymentEventRepository(BaseRepository[PaymentEvent]):
+    def __init__(self, db: AsyncSession):
+        super().__init__(PaymentEvent, db)
+
+
+    async def get_by_source_external(self, source: PaymentEventSource, external_id: str) -> Optional[PaymentEvent]:
+        stmt = select(PaymentEvent).where(PaymentEvent.source == source, PaymentEvent.external_id == external_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def add_if_new(self, event: PaymentEvent) -> tuple[PaymentEvent, bool]:
+        """
+        insert-first idempotency: the UNIQUE (source, external_id) pair makes a replayed callback harmless.
+        The insert runs in a SAVEPOINT so a duplicate does not poison the surrounding transaction
+        :param event: PaymentEvent
+        :return: (event, is_new). When is_new is False, `event` is the row stored earlier
+        """
+        try:
+            async with self.db.begin_nested():
+                self.db.add(event)
+                await self.db.flush()
+            return event, True
+        except IntegrityError:
+            existing = await self.get_by_source_external(event.source, event.external_id)
+            if existing is None:
+                raise
+            return existing, False
+
+
+    async def list_unprocessed(self, limit: int = 100) -> list[PaymentEvent]:
+        """
+        callbacks that need a human (unauthenticated, unmatched, or mismatched amount)
+        """
+        stmt = (
+            select(PaymentEvent)
+            .where(PaymentEvent.processed_at.is_(None))
+            .order_by(PaymentEvent.id)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
