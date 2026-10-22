@@ -50,3 +50,23 @@ class InventoryRepository(BaseRepository[Inventory]):
         total = (await self.db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
         stmt = base.order_by(Inventory.product_id).limit(per_page).offset((page - 1) * per_page)
         return list((await self.db.execute(stmt)).scalars().all()), total
+
+
+class StockMovementRepository(BaseRepository[StockMovement]):
+    def __init__(self, db: AsyncSession):
+        super().__init__(StockMovement, db)
+
+
+    async def list_for_product(self, product_id: int, page: int = 1, per_page: int = 50) -> tuple[list[StockMovement], int]:
+        """
+
+        :param product_id: int
+        :param page: int
+        :param per_page: int
+        :return: tuple[list[StockMovement], int]
+        """
+
+        base = select(StockMovement).where(StockMovement.product_id == product_id)
+        total = (await self.db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+        stmt = base.order_by(StockMovement.id.desc()).limit(per_page).offset((page - 1) * per_page)
+        return list((await self.db.execute(stmt)).scalars().all()), total
