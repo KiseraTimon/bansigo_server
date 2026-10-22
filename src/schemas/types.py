@@ -11,6 +11,7 @@ the order in which "strip / lowercase / match" happen.
 """
 
 import re
+from decimal import Decimal
 from typing import Annotated
 
 from pydantic import AfterValidator, EmailStr, Field
@@ -81,9 +82,30 @@ def _normalise_phone(v: str) -> str:
     return digits
 
 
+def _clean_text(v: str) -> str:
+    """
+    trims free text; the field's max_length (checked after this) bounds it
+    :param v: str
+    :return: str
+    """
+    return v.strip()
+
+
 # normalized properties
 Name = Annotated[str, AfterValidator(_clean_name)]
 Username = Annotated[str, AfterValidator(_clean_username)]
 Email = Annotated[EmailStr, AfterValidator(_clean_email)]
 Phone = Annotated[str, AfterValidator(_normalise_phone)]
 Password = Annotated[str, Field(min_length=8, max_length=128)]
+
+
+# trade-domain properties.
+# Mirrors the DB column types in src/models/types.py so a bad value fails as a 422, not a database error
+MoneyAmount = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
+PositiveMoney = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
+Quantity = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=3)]
+NonNegativeQuantity = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=3)]
+Latitude = Annotated[Decimal, Field(ge=-90, le=90, max_digits=9, decimal_places=6)]
+Longitude = Annotated[Decimal, Field(ge=-180, le=180, max_digits=9, decimal_places=6)]
+IdempotencyKey = Annotated[str, AfterValidator(_clean_text), Field(min_length=8, max_length=64)]
+ShortText = Annotated[str, AfterValidator(_clean_text), Field(min_length=1, max_length=255)]
