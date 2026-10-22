@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>{% block title %}{% endblock %}</title>
+
+		<!--Boxicons-->
+		<link
+			href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css"
+			rel="stylesheet"
+		/>
+
+		<!--Fontawesome icons-->
+		<link
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+			rel="stylesheet"
+		/>
+
+		<!--Remix icons-->
+		<link
+			href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"
+			rel="stylesheet"
+		/>
+
+		<!--Bootstrap CSS-->
+		<link
+			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+			rel="stylesheet"
+		/>
+
+		<!--Google Fonts-->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Inter:wght@300;400;500;600;700&display=swap"
+			rel="stylesheet"
+		/>
+
+		<!--CSS-->
+		<link
+			rel="stylesheet"
+			href="{{url_for('static', filename='css/style.css')}}?v=2.3"
+		/>
+		<link
+			rel="stylesheet"
+			href="{{url_for('static', filename='css/effects.css')}}?v=2.3"
+		/>
+
+		<!--Custom CSS-->
+		{% block css %}{% endblock %}
+	</head>
+	<body>
+
+
+		<!--Alerts For Flashed Messages-->
+		{% with messages = get_flashed_messages(with_categories=true) %}
+			{% if messages %}
+				{% for category, message in messages %}
+
+					<!--Error Messages-->
+					{% if category == 'error' %}
+						<div
+							class="alert-toast alert alert-danger alert-dismissible fade show m-0"
+							role="alert"
+						>
+							{{message}}
+							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						</div>
+
+					<!--Success Messages-->
+					{% elif category == 'success' %}
+						<div
+							class="alert-toast alert alert-success alert-dismissible fade show m-0"
+							role="alert"
+						>
+							{{message}}
+							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						</div>
+
+					<!--Warning Messages-->
+					{% elif category == 'warning' %}
+						<div
+							class="alert-toast alert alert-warning alert-dismissible fade show m-0"
+							role="alert"
+						>
+							{{message}}
+							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						</div>
+
+					<!--Info Messages-->
+					{% elif category == 'info' %}
+						<div
+							class="alert-toast alert alert-info alert-dismissible fade show m-0"
+							role="alert"
+						>
+							{{message}}
+							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						</div>
+					{% endif %}
+				{% endfor %}
+			{% endif %}
+		{% endwith %}
+
+		<!--Header & Navigation-->
+		{% block header %}
+			{% include 'components/header.html' %}
+		{% endblock %}
+
+		<!--Slide-Over Cart Drawer Sidebar-->
+		{% include 'components/cart_drawer.html' %}
+
+		<!--Page Body-->
+		<main class="site-main-content flex-grow-1">
+		{% block body %}
+		{% endblock %}
+		</main>
+
+		<!--Footer-->
+		{% block footer %}
+			{% include 'components/footer.html' %}
+		{% endblock %}
+
+		<!--Bootstrap JS-->
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+		<!--Global Brand & Cart Configuration-->
+		<script>
+			window.SPERO_CONFIG = {
+				brandName: {{ (brand_settings.brand_name if brand_settings else 'SPERO Gadgets & Electronics') | tojson }},
+				currency: {{ (brand_settings.currency_code if brand_settings else 'KES') | tojson }},
+				whatsappNumber: {{ (brand_settings.clean_whatsapp if brand_settings and brand_settings.clean_whatsapp else '254700000000') | tojson }},
+				vatRate: {{ (brand_settings.vat_rate if brand_settings else 16.0) | tojson }},
+				freeShippingThreshold: {{ (brand_settings.free_shipping_threshold if brand_settings else 6500.0) | float }},
+				standardDeliveryFee: 350
+			};
+		</script>
+
+		<!--General Scripts-->
+		<script src="{{url_for('static', filename='js/main.js')}}"></script>
+
+		<!--Custom JS-->
+		{% block js %}{% endblock %}
+
+		<!-- Elfsight WhatsApp Floating Chat Widget (Storefront Pages, Excluded on Checkout & Admin) -->
+		{% block floating_whatsapp %}
+			{% if request.endpoint != 'routes.checkout' and request.path not in ['/checkout', '/cart'] and not request.path.startswith('/admin') %}
+				<!-- Elfsight WhatsApp Chat | Untitled WhatsApp Chat -->
+				<script src="https://elfsightcdn.com/platform.js" async></script>
+				<div class="elfsight-floating-wrapper" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; pointer-events: none;">
+					<div class="elfsight-app-75eb180e-f462-4891-b1f4-455c4fb917e1" data-elfsight-app-lazy style="pointer-events: auto;"></div>
+				</div>
+			{% endif %}
+		{% endblock %}
+	</body>
+</html>
+
