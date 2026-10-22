@@ -42,5 +42,5 @@ __all__ = [
     "FulfilmentType", "Order", "OrderItem", "OrderPaymentStatus", "OrderStatus",
     "OrderStatusHistory", "PaymentMethod", "PickStatus", "User", "UserRole",
     "Payment", "PaymentChannel", "PaymentEvent", "PaymentEventSource", "PaymentStatus",
-    "Refund", "RefundStatus", "TokenPurpose", "VerificationToken"
+    "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus"
 ]
