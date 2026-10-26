@@ -1,0 +1,44 @@
+<!-- src/templates/admin/sections/topbar.html -->
+<header class="admin-topbar">
+    <div class="d-flex align-items-center gap-3">
+        <div>
+            <h5 class="fw-bold mb-0 text-dark" id="adminSectionTitle" style="color: var(--text-heading) !important;">Overview</h5>
+            <small class="text-muted" style="font-size: 0.75rem;">
+                Bansi Retail Operations &middot; <span class="badge bg-light text-dark border">{{ security.app_env | upper if security else 'DEV' }}</span>
+            </small>
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-3">
+        <!-- Live System Status Indicator -->
+        <div class="d-flex align-items-center bg-subtle px-3 py-1 rounded-pill small border" style="background-color: var(--bg-subtle); border-color: var(--border-color) !important;">
+            <span class="pulse-dot online"></span>
+            <span class="text-muted" style="font-size: 0.75rem;">M-Pesa {{ security.mpesa_env | capitalize if security else 'Sandbox' }}</span>
+        </div>
+
+        <!-- Quick Bulk Action Shortcuts -->
+        <button type="button" class="btn btn-sm btn-bansi-outline-blue d-flex align-items-center gap-1" onclick="openBulkModal()">
+            <i class="ri-file-excel-2-line"></i>
+            <span>Bulk Spreadsheets</span>
+        </button>
+
+        <!-- Theme Toggle Button -->
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle d-flex align-items-center justify-content-center p-2" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Dark/Light Mode" style="width: 36px; height: 36px;">
+            <i class="ri-moon-line"></i>
+        </button>
+
+        <!-- Current Admin Identity -->
+        <div class="dropdown">
+            <button class="btn btn-sm btn-light border d-flex align-items-center gap-2 rounded-pill px-3 py-1 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background-color: var(--bg-surface); border-color: var(--border-color) !important;">
+                <span class="small fw-semibold" style="color: var(--text-main);">{{ admin_user.first_name if admin_user else 'Admin' }}</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+                <li><h6 class="dropdown-header small text-muted">Role: {{ admin_level | capitalize }}</h6></li>
+                <li><a class="dropdown-item small" href="#account" onclick="document.querySelector('[data-tab=account]').click()"><i class="ri-user-settings-line me-2"></i>Account Settings</a></li>
+                <li><a class="dropdown-item small" href="#securityTab" onclick="document.querySelector('[data-tab=security]').click()"><i class="ri-shield-check-line me-2"></i>Security Policies</a></li>
+                <li><hr class="dropdown-divider" style="border-color: var(--border-color);"></li>
+                <li><a class="dropdown-item small text-danger" href="{{ base_url }}/logout"><i class="ri-logout-box-r-line me-2"></i>Sign Out</a></li>
+            </ul>
+        </div>
+    </div>
+</header>
