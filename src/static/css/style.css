@@ -1,0 +1,176 @@
+/* src/static/css/style.css */
+
+:root {
+  --bansi-red: #D32F2F;
+  --bansi-red-hover: #B71C1C;
+  --bansi-red-light: #FFEBEE;
+  --bansi-red-border: #FFCDD2;
+  --bansi-blue: #1A367E;
+  --bansi-blue-hover: #102454;
+  --bansi-blue-light: #E8EEF9;
+  --bansi-blue-border: #C5D4ED;
+
+  --bg-page: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F1F5F9;
+  --border-color: #E2E8F0;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --text-heading: #0F172A;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}
+
+[data-bs-theme="dark"],
+[data-theme="dark"] {
+  --bg-page: #0B1120;
+  --bg-surface: #111827;
+  --bg-subtle: #1E293B;
+  --border-color: #334155;
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-heading: #FFFFFF;
+
+  --bansi-red-light: rgba(211, 47, 47, 0.15);
+  --bansi-red-border: rgba(211, 47, 47, 0.35);
+  --bansi-blue-light: rgba(26, 54, 126, 0.25);
+  --bansi-blue-border: rgba(26, 54, 126, 0.45);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  transition: background-color 0.25s ease, color 0.25s ease;
+  min-height: 100vh;
+}
+
+/* Brand Button Styles */
+.btn-bansi-red {
+  background-color: var(--bansi-red);
+  border-color: var(--bansi-red);
+  color: #FFFFFF;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-bansi-red:hover,
+.btn-bansi-red:focus {
+  background-color: var(--bansi-red-hover);
+  border-color: var(--bansi-red-hover);
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.25);
+}
+
+.btn-bansi-blue {
+  background-color: var(--bansi-blue);
+  border-color: var(--bansi-blue);
+  color: #FFFFFF;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-bansi-blue:hover,
+.btn-bansi-blue:focus {
+  background-color: var(--bansi-blue-hover);
+  border-color: var(--bansi-blue-hover);
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(26, 54, 126, 0.25);
+}
+
+.btn-bansi-outline-red {
+  border: 1px solid var(--bansi-red);
+  color: var(--bansi-red);
+  background: transparent;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-bansi-outline-red:hover {
+  background-color: var(--bansi-red);
+  color: #FFFFFF;
+}
+
+.btn-bansi-outline-blue {
+  border: 1px solid var(--bansi-blue);
+  color: var(--bansi-blue);
+  background: transparent;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.btn-bansi-outline-blue:hover {
+  background-color: var(--bansi-blue);
+  color: #FFFFFF;
+}
+
+/* Card Styles */
+.bansi-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.25s ease;
+}
+
+/* Table styles */
+.bansi-table {
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+.bansi-table th {
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.bansi-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.875rem;
+}
+.bansi-table tbody tr:hover {
+  background-color: rgba(26, 54, 126, 0.03);
+}
+[data-bs-theme="dark"] .bansi-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Badge Styles */
+.badge-bansi-red {
+  background-color: var(--bansi-red-light);
+  color: var(--bansi-red);
+  border: 1px solid var(--bansi-red-border);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.badge-bansi-blue {
+  background-color: var(--bansi-blue-light);
+  color: var(--bansi-blue);
+  border: 1px solid var(--bansi-blue-border);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* Form controls */
+.bansi-input {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.bansi-input:focus {
+  background-color: var(--bg-surface);
+  border-color: var(--bansi-blue);
+  box-shadow: 0 0 0 3px rgba(26, 54, 126, 0.15);
+  color: var(--text-main);
+  outline: none;
+}
