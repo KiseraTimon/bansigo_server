@@ -7,11 +7,14 @@ so 'removing' means is_active = False.
 """
 
 
+from typing import Any
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exceptions import AppError, BusinessRuleError, ConflictError, NotFoundError
-from src.models import Brand, Category, Inventory, Product
+from src.models import Brand, Category, Inventory, OrderItem, Product, StockMovement
 from src.repositories import BrandRepository, CategoryRepository, ProductRepository
 from src.schemas import (
     BrandCreate, BrandUpdate, CategoryCreate, CategoryTree, CategoryUpdate, Page, ProductCreate, ProductPublic,
@@ -248,6 +251,68 @@ class CatalogueService:
 
         await self._commit(["sku, barcode or slug"])
         return ProductStaff.from_product(await self.products.get_full(product_id))
+
+
+    async def delete_product(self, product_id: int, actor_id: int) -> dict[str, Any]:
+        """
+        safely deletes a product if it has never been used in orders or inventory movements,
+        or deactivates (archives) it to preserve historical ledger integrity.
+        """
+        product = await self.products.get_by_id(product_id)
+        if product is None:
+            raise NotFoundError("Product not found")
+
+        # Check references in OrderItem and StockMovement
+        order_refs = (
+            await self.db.execute(
+                select(func.count(OrderItem.id)).where(OrderItem.product_id == product_id)
+            )
+        ).scalar_one() or 0
+
+        movement_refs = (
+            await self.db.execute(
+                select(func.count(StockMovement.id)).where(StockMovement.product_id == product_id)
+            )
+        ).scalar_one() or 0
+
+        if order_refs > 0 or movement_refs > 0:
+            was_active = product.is_active
+            product.is_active = False
+            product.updated_by = actor_id
+            self.audit.record(
+                actor_id=actor_id,
+                action="product.archived",
+                entity_type="product",
+                entity_id=product_id,
+                before={"is_active": was_active, "name": product.name, "sku": product.sku},
+                after={"is_active": False, "reason": "RESTRICT constraint - historical records exist"},
+            )
+            await self.db.commit()
+            return {
+                "action": "archived",
+                "detail": f"Product '{product.name}' has historical sales or stock movements. It has been deactivated and archived to preserve ledger records.",
+                "product_id": product_id,
+            }
+
+        prod_name = product.name
+        prod_sku = product.sku
+        await self.db.execute(delete(Inventory).where(Inventory.product_id == product_id))
+        await self.db.delete(product)
+
+        self.audit.record(
+            actor_id=actor_id,
+            action="product.deleted",
+            entity_type="product",
+            entity_id=product_id,
+            before={"name": prod_name, "sku": prod_sku},
+            after=None,
+        )
+        await self.db.commit()
+        return {
+            "action": "deleted",
+            "detail": f"Product '{prod_name}' has been permanently deleted from the catalog.",
+            "product_id": product_id,
+        }
 
 
     # products: reads
