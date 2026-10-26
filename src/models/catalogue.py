@@ -4,7 +4,7 @@ import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false, true
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -128,6 +128,7 @@ class Product(Base, AuditMixin):
     slug: Mapped[str] = mapped_column(String(170), nullable=False, unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     image_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gallery_images: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True, default=list)
 
     # sale properties
     unit: Mapped[UnitType] = mapped_column(str_enum(UnitType), nullable=False, default=UnitType.PIECE)
