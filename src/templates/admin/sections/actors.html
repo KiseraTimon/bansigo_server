@@ -1,0 +1,337 @@
+<!-- src/templates/admin/sections/actors.html -->
+<div class="admin-tab-pane fade-in" id="actorsTab">
+    <div class="bansi-card p-4">
+        <!-- Section Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">System Actors & Workforce</h5>
+                <p class="text-muted small mb-0">Monitor store personnel, dispatch riders, manage customer accounts, and regulate administrative access.</p>
+            </div>
+            <!-- Sub-tab Pills -->
+            <ul class="nav nav-pills" id="actorsSubTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active small py-1 px-3" id="riders-pill" data-bs-toggle="pill" data-bs-target="#ridersPillContent" type="button" role="tab">
+                        <i class="ri-ebike-2-line me-1"></i> Delivery Riders ({{ actors.riders|length if actors and actors.riders else '0' }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" id="staff-pill" data-bs-toggle="pill" data-bs-target="#staffPillContent" type="button" role="tab">
+                        <i class="ri-user-star-line me-1"></i> Store Staff ({{ actors.staff|length if actors and actors.staff else '0' }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" id="admins-pill" data-bs-toggle="pill" data-bs-target="#adminsPillContent" type="button" role="tab">
+                        <i class="ri-shield-user-line me-1"></i> Administrators ({{ actors.admins|length if actors and actors.admins else '0' }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" id="customers-pill" data-bs-toggle="pill" data-bs-target="#customersPillContent" type="button" role="tab">
+                        <i class="ri-user-smile-line me-1"></i> Customers ({{ actors.customers|length if actors and actors.customers else '0' }})
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="tab-content" id="actorsTabContent">
+            <!-- 1. Delivery Riders Sub-tab -->
+            <div class="tab-pane fade show active" id="ridersPillContent" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Rider Name</th>
+                                <th>Phone Number</th>
+                                <th>Vehicle</th>
+                                <th>Plate</th>
+                                <th>Rating</th>
+                                <th>Completed</th>
+                                <th>Approval Status</th>
+                                <th class="text-end">Vetting Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if actors and actors.riders and actors.riders|length > 0 %}
+                                {% for r in actors.riders %}
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ r.name }}</div>
+                                            <div class="text-muted" style="font-size: 0.72rem;">ID #RDR-{{ r.id }}</div>
+                                        </td>
+                                        <td class="font-monospace small">{{ r.phone }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ r.vehicle_type | capitalize }}</span></td>
+                                        <td><code>{{ r.vehicle_plate }}</code></td>
+                                        <td>
+                                            <span class="text-warning fw-bold small"><i class="ri-star-fill"></i> {{ r.rating_average }}</span>
+                                        </td>
+                                        <td>{{ r.deliveries_completed }}</td>
+                                        <td>
+                                            {% if r.approval_status == 'approved' %}
+                                                <span class="badge bg-success-subtle text-success">Approved</span>
+                                            {% elif r.approval_status == 'pending' %}
+                                                <span class="badge bg-warning-subtle text-warning-emphasis">Pending Vetting</span>
+                                            {% elif r.approval_status == 'suspended' %}
+                                                <span class="badge bg-danger-subtle text-danger">Suspended</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary-subtle text-secondary">{{ r.approval_status | capitalize }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                {% if r.approval_status != 'approved' %}
+                                                    <button type="button" class="btn btn-outline-success" onclick="vetRiderAction({{ r.id }}, 'approve', '{{ r.name }}')" title="Approve Rider" aria-label="Approve Rider">
+                                                        <i class="ri-check-line pointer-events-none"></i> Approve
+                                                    </button>
+                                                {% endif %}
+                                                {% if r.approval_status != 'suspended' %}
+                                                    <button type="button" class="btn btn-outline-warning" onclick="vetRiderAction({{ r.id }}, 'suspend', '{{ r.name }}')" title="Suspend Rider" aria-label="Suspend Rider">
+                                                        <i class="ri-pause-circle-line pointer-events-none"></i> Suspend
+                                                    </button>
+                                                {% endif %}
+                                                {% if r.approval_status != 'rejected' %}
+                                                    <button type="button" class="btn btn-outline-danger" onclick="vetRiderAction({{ r.id }}, 'reject', '{{ r.name }}')" title="Reject Rider" aria-label="Reject Rider">
+                                                        <i class="ri-close-circle-line pointer-events-none"></i>
+                                                    </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted small">
+                                        <i class="ri-ebike-line fs-3 d-block mb-1 text-secondary"></i>
+                                        No delivery riders registered in the platform yet.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. Store Staff Sub-tab -->
+            <div class="tab-pane fade" id="staffPillContent" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Staff Member</th>
+                                <th>Employee ID</th>
+                                <th>Role Position</th>
+                                <th>Contact</th>
+                                <th>Shift Duty</th>
+                                <th>Hired Date</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if actors and actors.staff and actors.staff|length > 0 %}
+                                {% for s in actors.staff %}
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ s.name }}</div>
+                                            <div class="text-muted" style="font-size: 0.72rem;">User #{{ s.user_id }}</div>
+                                        </td>
+                                        <td><code>{{ s.employee_number }}</code></td>
+                                        <td><span class="badge badge-bansi-blue">{{ s.position | replace('_', ' ') | title }}</span></td>
+                                        <td class="small">{{ s.email }}<br><span class="text-muted">{{ s.phone }}</span></td>
+                                        <td>
+                                            {% if s.is_on_duty %}
+                                                <span class="badge bg-success-subtle text-success"><span class="pulse-dot online"></span> On Duty</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary-subtle text-muted">Off Shift</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="small text-muted">{{ s.hired_on }}</td>
+                                        <td class="text-end">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleStaffDutyAction({{ s.id }}, '{{ s.name }}', {{ 'true' if s.is_on_duty else 'false' }})" title="Toggle Shift Duty Status" aria-label="Toggle Shift Duty Status">
+                                                <i class="ri-time-line pointer-events-none"></i> Shift Toggle
+                                            </button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted small">
+                                        <i class="ri-user-star-line fs-3 d-block mb-1 text-secondary"></i>
+                                        No store staff members recorded in the system.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. Administrators Sub-tab (Superadmin Regulation) -->
+            <div class="tab-pane fade" id="adminsPillContent" role="tabpanel">
+                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 mb-3 border" style="background-color: var(--bg-subtle);">
+                    <div>
+                        <div class="fw-bold small text-dark"><i class="ri-shield-keyhole-line text-danger me-1"></i>Administrator Regulation & Governance</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Superadmins (Business Owners) regulate administrative authority levels across Operations and Finance. Self-modification is restricted for security.</div>
+                    </div>
+                    {% if not is_superadmin %}
+                        <span class="badge bg-warning-subtle text-warning-emphasis small px-2 py-1">
+                            <i class="ri-lock-line me-1"></i> Read-Only (Owner Privilege)
+                        </span>
+                    {% endif %}
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Administrator Name</th>
+                                <th>Username</th>
+                                <th>Email Address</th>
+                                <th>Admin Authority Level</th>
+                                <th>Account State</th>
+                                <th>Created</th>
+                                {% if is_superadmin %}<th class="text-end">Privilege Control</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set other_admins = [] %}
+                            {% if actors and actors.admins %}
+                                {% for a in actors.admins %}
+                                    {% if not current_admin_user_id or a.user_id != current_admin_user_id %}
+                                        {% set _ = other_admins.append(a) %}
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">{{ a.name }}</div>
+                                                <div class="text-muted" style="font-size: 0.72rem;">User #{{ a.user_id }}</div>
+                                            </td>
+                                            <td><code class="text-primary">{{ a.username }}</code></td>
+                                            <td class="small">{{ a.email }}</td>
+                                            <td>
+                                                {% if a.level == 'super' %}
+                                                    <span class="badge badge-bansi-red">SUPERADMIN (OWNER)</span>
+                                                {% elif a.level == 'operations' %}
+                                                    <span class="badge badge-bansi-blue">OPERATIONS (STORE MANAGER)</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary-subtle text-secondary">{{ a.level | upper }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if a.is_active %}
+                                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger-subtle text-danger">Disabled</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="small text-muted">{{ a.created_at }}</td>
+                                            {% if is_superadmin %}
+                                                <td class="text-end">
+                                                    <div class="d-inline-flex gap-2">
+                                                        <select class="form-select form-select-sm bansi-input py-0 px-2" style="width: 140px; font-size: 0.75rem;"
+                                                                data-current-level="{{ a.level }}"
+                                                                onchange="changeAdminLevelPrompt(this, {{ a.id }}, '{{ a.name }}')"
+                                                                title="Change Admin Authority Level" aria-label="Change Admin Authority Level">
+                                                            <option value="super" {% if a.level == 'super' %}selected{% endif %}>Superadmin</option>
+                                                            <option value="operations" {% if a.level == 'operations' %}selected{% endif %}>Operations</option>
+                                                            <option value="finance" {% if a.level == 'finance' %}selected{% endif %}>Finance</option>
+                                                        </select>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                                                                onclick="toggleUserStatusAction({{ a.user_id }}, '{{ a.name }}', {{ 'true' if a.is_active else 'false' }}, 'admin')"
+                                                                title="Toggle Administrator Account Active Status" aria-label="Toggle Administrator Account Active Status">
+                                                            <i class="ri-user-unfollow-line pointer-events-none"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            {% endif %}
+                                        </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+
+                            {% if other_admins|length == 0 %}
+                                <tr>
+                                    <td colspan="{% if is_superadmin %}7{% else %}6{% endif %}" class="text-center py-4 text-muted small">
+                                        <i class="ri-shield-user-line fs-3 d-block mb-1 text-secondary"></i>
+                                        No other secondary administrators registered. Your own active administrator profile is protected from self-regulation.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Registered Customers Sub-tab -->
+            <div class="tab-pane fade" id="customersPillContent" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Contact</th>
+                                <th>Loyalty Points</th>
+                                <th>Tier</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set visible_customers = [] %}
+                            {% if actors and actors.customers %}
+                                {% for c in actors.customers %}
+                                    {% if not current_admin_user_id or c.user_id != current_admin_user_id %}
+                                        {% set _ = visible_customers.append(c) %}
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">{{ c.name }}</div>
+                                                <div class="text-muted" style="font-size: 0.72rem;">Customer #{{ c.id }}</div>
+                                            </td>
+                                            <td class="small">{{ c.phone }}<br><span class="text-muted">{{ c.email }}</span></td>
+                                            <td>
+                                                <span class="badge bg-warning-subtle text-dark fw-bold"><i class="ri-coins-line me-1"></i>{{ c.loyalty_points }} pts</span>
+                                            </td>
+                                            <td>
+                                                {% if c.is_premium %}
+                                                    <span class="badge badge-bansi-blue">Premium Gold</span>
+                                                {% else %}
+                                                    <span class="badge bg-light text-dark border">Standard</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if c.is_active %}
+                                                    <span class="badge bg-success-subtle text-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary-subtle text-muted">Deactivated</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-end">
+                                                {% if c.is_active %}
+                                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                                            onclick="toggleUserStatusAction({{ c.user_id }}, '{{ c.name }}', true, 'customer')"
+                                                            title="Deactivate Customer Account" aria-label="Deactivate Customer Account">
+                                                        <i class="ri-user-forbid-line pointer-events-none me-1"></i>Deactivate
+                                                    </button>
+                                                {% else %}
+                                                    <button type="button" class="btn btn-sm btn-outline-success"
+                                                            onclick="toggleUserStatusAction({{ c.user_id }}, '{{ c.name }}', false, 'customer')"
+                                                            title="Reactivate Customer Account" aria-label="Reactivate Customer Account">
+                                                        <i class="ri-user-follow-line pointer-events-none me-1"></i>Reactivate
+                                                    </button>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+
+                            {% if visible_customers|length == 0 %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted small">
+                                        <i class="ri-user-smile-line fs-3 d-block mb-1 text-secondary"></i>
+                                        No registered customers found in the database.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,27 @@
+<!-- src/templates/admin/sections/confirmation_modal.html -->
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm" style="max-width: 440px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom pb-2">
+                <h6 class="modal-title fw-bold d-flex align-items-center gap-2" id="confirmationModalLabel" style="color: var(--text-heading);">
+                    <i class="ri-alert-line text-warning fs-5" id="confirmModalIcon"></i>
+                    <span id="confirmModalTitle">Confirm Action</span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="mb-0 text-muted small" id="confirmModalMessage">
+                    Are you sure you want to proceed with this administrative action?
+                </p>
+            </div>
+            <div class="modal-footer border-top pt-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" id="confirmCancelBtn">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-sm btn-bansi-red px-3" id="confirmProceedBtn">
+                    Confirm & Proceed
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

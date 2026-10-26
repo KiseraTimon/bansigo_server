@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, Boolean, Index, true
+from sqlalchemy import String, Boolean, Index, false, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -54,6 +54,7 @@ class User(Base, TimestampMixin):
     # truth fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    two_factor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
 
     # timestamp fields
     last_login: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)

@@ -1,6 +1,7 @@
-# src/services
+# src/services/__init__.py
 
 from .address_service import AddressService
+from .admin_service import AdminService
 from .audit_service import AuditService
 from .auth_service import AuthService
 from .catalogue_service import CatalogueService
@@ -15,6 +16,7 @@ from .verification_service import VerificationService
 
 __all__ = [
     "AddressService",
+    "AdminService",
     "AuditService",
     "AuthService",
     "CatalogueService",

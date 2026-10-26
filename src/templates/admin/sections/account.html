@@ -1,0 +1,173 @@
+<!-- src/templates/admin/sections/account.html -->
+<div class="admin-tab-pane fade-in" id="accountTab">
+    <div class="bansi-card p-4">
+        <!-- Section Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-user-settings-line text-danger me-2"></i>My Administrator Account
+                </h5>
+                <p class="text-muted small mb-0">Manage your administrator identity, contact details, and authentication credentials.</p>
+            </div>
+            <div>
+                {% if is_superadmin %}
+                    <span class="badge badge-bansi-red px-3 py-2">
+                        <i class="ri-shield-star-line me-1"></i> Superadministrator (Business Owner)
+                    </span>
+                {% else %}
+                    <span class="badge badge-bansi-blue px-3 py-2">
+                        <i class="ri-user-star-line me-1"></i> Store Operations Administrator
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Identity Banner Card -->
+        <div class="p-4 rounded-3 border mb-4 bg-white shadow-xs">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
+                         style="width: 56px; height: 56px; background-color: {% if is_superadmin %}#D32F2F{% else %}#1A367E{% endif %}; font-size: 1.35rem;">
+                        {{ (admin_user.first_name[0] if admin_user and admin_user.first_name else 'A') | upper }}
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h5 class="fw-bold mb-0 text-dark">
+                                {{ admin_user.first_name if admin_user else 'Admin' }} {{ admin_user.last_name if admin_user else '' }}
+                            </h5>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                <i class="ri-check-line me-1"></i> Active
+                            </span>
+                            {% if admin_user and admin_user.two_factor_enabled %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                    <i class="ri-shield-check-line me-1"></i> 2FA Enabled
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <span class="font-monospace text-primary me-2">@{{ admin_user.username if admin_user else 'admin' }}</span>
+                            &middot;
+                            <span class="ms-2 me-2"><i class="ri-mail-line me-1"></i>{{ admin_user.email if admin_user else '-' }}</span>
+                            &middot;
+                            <span class="ms-2"><i class="ri-phone-line me-1"></i>{{ admin_user.phone if admin_user else '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <span class="text-muted small d-block">Admin ID #{{ admin_profile.id if admin_profile else '-' }} (User #{{ admin_user.id if admin_user else '-' }})</span>
+                    <span class="text-muted small" style="font-size: 0.72rem;">Last Active: Today</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- 1. Personal Profile Details Form -->
+            <div class="col-lg-6">
+                <div class="p-4 rounded-3 border h-100 bg-white shadow-xs">
+                    <h6 class="fw-bold mb-3 text-dark d-flex align-items-center gap-2">
+                        <i class="ri-id-card-line text-primary"></i>
+                        <span>Profile Information</span>
+                    </h6>
+                    <p class="text-muted small mb-3">Update your display name and contact credentials across the administration network.</p>
+
+                    <form id="adminProfileForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="adminFirstName">First Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control bansi-input" id="adminFirstName" name="first_name"
+                                       value="{{ admin_user.first_name if admin_user else '' }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold" for="adminLastName">Last Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control bansi-input" id="adminLastName" name="last_name"
+                                       value="{{ admin_user.last_name if admin_user else '' }}" required>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold" for="adminUsername">Username</label>
+                                <input type="text" class="form-control bansi-input font-monospace bg-light" id="adminUsername"
+                                       value="{{ admin_user.username if admin_user else '' }}" disabled readonly>
+                                <div class="form-text" style="font-size: 0.72rem;">Permanent administrative identifier assigned during setup.</div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold" for="adminEmail">Email Address <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control bansi-input" id="adminEmail" name="email"
+                                       value="{{ admin_user.email if admin_user else '' }}" required>
+                                <div class="form-text" style="font-size: 0.72rem;">Used for login authentication, critical alerts, and 2FA challenge codes.</div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold" for="adminPhone">Phone Number <span class="text-danger">*</span></label>
+                                <input type="tel" class="form-control bansi-input" id="adminPhone" name="phone"
+                                       value="{{ admin_user.phone if admin_user else '' }}" required placeholder="+254 700 000 000">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold" for="adminPicture">Avatar / Profile Picture URL</label>
+                                <input type="url" class="form-control bansi-input" id="adminPicture" name="picture"
+                                       value="{{ admin_user.picture if admin_user and admin_user.picture else '' }}" placeholder="https://... or /static/images/avatars/me.jpg">
+                            </div>
+
+                            <div class="col-12 pt-2 text-end">
+                                <button type="submit" class="btn btn-sm btn-bansi-red px-4" id="saveProfileBtn">
+                                    <i class="ri-save-line me-1"></i> Save Profile Details
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 2. Password Change & Security -->
+            <div class="col-lg-6">
+                <div class="p-4 rounded-3 border h-100 bg-white shadow-xs d-flex flex-column justify-content-between">
+                    <div>
+                        <h6 class="fw-bold mb-3 text-dark d-flex align-items-center gap-2">
+                            <i class="ri-lock-password-line text-danger"></i>
+                            <span>Change Credentials</span>
+                        </h6>
+                        <p class="text-muted small mb-3">Ensure your account uses a robust, unique password containing letters, numbers, and symbols.</p>
+
+                        <form id="adminPasswordForm">
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold" for="currentPassword">Current Password <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control bansi-input" id="currentPassword" name="current_password" required autocomplete="current-password">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold" for="newPassword">New Password <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control bansi-input" id="newPassword" name="new_password" minlength="8" required autocomplete="new-password">
+                                <div class="form-text" style="font-size: 0.72rem;">Minimum 8 characters. Must differ from your current password.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold" for="newPasswordConfirm">Confirm New Password <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control bansi-input" id="newPasswordConfirm" name="new_password_confirm" minlength="8" required autocomplete="new-password">
+                            </div>
+
+                            <div class="pt-2 text-end">
+                                <button type="submit" class="btn btn-sm btn-outline-danger px-4" id="updatePasswordBtn">
+                                    <i class="ri-key-2-line me-1"></i> Update Password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 3. Self-Regulation Safety Lock Alert -->
+                    <div class="alert alert-light border mt-4 mb-0 rounded-3 p-3" style="background-color: var(--bg-subtle);">
+                        <div class="d-flex gap-2">
+                            <i class="ri-shield-check-line text-primary fs-5 mt-1"></i>
+                            <div>
+                                <h6 class="fw-bold mb-1 small text-dark">Administrative Safety & Self-Regulation Lock</h6>
+                                <p class="text-muted small mb-0" style="font-size: 0.75rem; line-height: 1.45;">
+                                    To protect platform integrity and prevent accidental administrative lockout, administrators are strictly restricted from self-deactivation, account deletion, or modifying their own privilege tier. Any role adjustments or access revocations must be performed by another Superadministrator via the <strong>System Actors</strong> control tab.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

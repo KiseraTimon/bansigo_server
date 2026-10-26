@@ -2,14 +2,21 @@
 
 from fastapi import APIRouter
 
-from src.routers.server.auth import router as server_auth_router
-from src.routers.server.profiles import router as server_profiles_router
-
+from config import get_settings
+from src.routers.server import (
+    admin_router,
+    server_auth_router,
+    server_profiles_router,
+)
 
 # router object
 router = APIRouter()
 
-
-# related routers
+# public API routers
 router.include_router(server_auth_router, prefix="/api/auth", tags=["auth"])   # auth ops
 router.include_router(server_profiles_router, prefix="/api/users", tags=["users"])    # profile ops
+
+# internal/back-office admin console (hidden from schemas, no /api prefix, obfuscated path)
+settings = get_settings()
+admin_portal_prefix = f"/{settings.admin_portal_path.strip('/')}/admin"
+router.include_router(admin_router, prefix=admin_portal_prefix, include_in_schema=False)

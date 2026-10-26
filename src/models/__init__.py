@@ -31,6 +31,7 @@ from .payment import (
     Refund,
     RefundStatus
 )
+from .review import Review, ReviewTargetType
 
 
 # exportable
@@ -42,5 +43,6 @@ __all__ = [
     "FulfilmentType", "Order", "OrderItem", "OrderPaymentStatus", "OrderStatus",
     "OrderStatusHistory", "PaymentMethod", "PickStatus", "User", "UserRole",
     "Payment", "PaymentChannel", "PaymentEvent", "PaymentEventSource", "PaymentStatus",
-    "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus"
+    "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus",
+    "Review", "ReviewTargetType",
 ]

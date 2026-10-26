@@ -69,6 +69,18 @@ def create_app() -> FastAPI:
     # template object
     if Path(TEMPLATES_DIR).is_dir():
         app.state.templates = Jinja2Templates(directory=TEMPLATES_DIR)
+        app.state.templates.env.globals["get_flashed_messages"] = lambda **kwargs: []
+
+        from jinja2 import pass_context
+
+        @pass_context
+        def safe_url_for(context, name: str, **path_params):
+            req = context["request"]
+            if name == "static" and "filename" in path_params and "path" not in path_params:
+                path_params["path"] = path_params.pop("filename")
+            return req.url_for(name, **path_params)
+
+        app.state.templates.env.globals["url_for"] = safe_url_for
 
 
     # routers
@@ -79,8 +91,18 @@ def create_app() -> FastAPI:
     # http exception handler
     @app.exception_handler(StarletteHTTPException)
     async def http_exceptions(request: Request, exception: StarletteHTTPException):
-        # exceptions from apis
-        if request.url.path.startswith("/api"):
+        # determine if request expects JSON (API routes, AJAX calls, or mutation verbs)
+        accept = request.headers.get("accept", "").lower()
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        content_type = request.headers.get("content-type", "").lower()
+
+        if (
+            request.url.path.startswith("/api")
+            or "application/json" in accept
+            or "application/json" in content_type
+            or is_ajax
+            or request.method in ("POST", "PATCH", "PUT", "DELETE")
+        ):
             return await http_exception_handler(request, exception)
 
         message = (
@@ -89,7 +111,7 @@ def create_app() -> FastAPI:
             "An error occurred. Please check your request and try again"
         )
 
-        # exceptions from views
+        # exceptions from browser views
         return app.state.templates.TemplateResponse(
             request,
             "errors.html",

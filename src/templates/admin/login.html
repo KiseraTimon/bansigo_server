@@ -1,0 +1,56 @@
+<!-- src/templates/admin/login.html -->
+{% extends 'template.html' %}
+
+{% block title %}Administrative Login | BansiGo{% endblock %}
+
+{% block header %}{% endblock %}
+{% block cart_drawer %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block floating_whatsapp %}{% endblock %}
+
+{% block body %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light p-4" style="background-color: var(--bg-page) !important;">
+    <div class="card bansi-card p-4 p-md-5 shadow-lg border-0" style="width: 100%; max-width: 440px; border-radius: 16px;">
+        <!-- Logo & Branding -->
+        <div class="text-center mb-4">
+            <img src="/static/images/logo.png" alt="Bansi Logo" height="72" class="mb-2" onerror="this.style.display='none'">
+            <h4 class="fw-bold mb-0 text-danger">Bansi<span class="text-primary">Go</span></h4>
+            <div class="text-primary fw-semibold small" style="letter-spacing: 0.05em; font-size: 0.72rem;">WIDEST VARIETY, LOWEST PRICES</div>
+            <div class="badge badge-bansi-blue mt-2 px-3 py-1">ADMINISTRATIVE CONSOLE</div>
+        </div>
+
+        {% if error %}
+            <div class="alert alert-danger py-2 px-3 small border-0 mb-3 rounded-3" role="alert">
+                <i class="ri-error-warning-line me-1"></i> {{ error }}
+            </div>
+        {% endif %}
+
+        <!-- Form -->
+        <form method="POST" action="{{ base_url }}/login">
+            <div class="mb-3">
+                <label class="form-label small fw-semibold" for="adminUsername">Username or Email</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted" style="border-color: var(--border-color);"><i class="ri-user-line"></i></span>
+                    <input type="text" class="form-control bansi-input border-start-0" id="adminUsername" name="username" required autofocus placeholder="Administrator username">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label small fw-semibold" for="adminPassword">Security Password</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 text-muted" style="border-color: var(--border-color);"><i class="ri-lock-line"></i></span>
+                    <input type="password" class="form-control bansi-input border-start-0" id="adminPassword" name="password" required placeholder="••••••••••••">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-bansi-red w-100 py-2 fw-semibold shadow-sm rounded-3">
+                <i class="ri-login-box-line me-1"></i> Sign In to Console
+            </button>
+        </form>
+
+        <div class="text-center mt-4 text-muted small" style="font-size: 0.72rem;">
+            Restricted access. All access attempts are recorded in system audit logs.
+        </div>
+    </div>
+</div>
+{% endblock %}

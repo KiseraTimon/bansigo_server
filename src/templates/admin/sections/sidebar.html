@@ -1,0 +1,84 @@
+<!-- src/templates/admin/sections/sidebar.html -->
+<aside class="admin-sidebar">
+    <!-- Brand Header -->
+    <div class="admin-sidebar-header">
+        <img src="/static/images/logo.png" alt="Bansi Logo" height="38" class="rounded" onerror="this.style.display='none'">
+        <div>
+            <div class="fw-bold fs-5 lh-1 text-danger">Bansi<span class="text-primary">Go</span></div>
+            <div class="text-primary fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.05em;">ADMIN CONSOLE</div>
+        </div>
+    </div>
+
+    <!-- Navigation List -->
+    <div class="admin-sidebar-nav">
+        <div class="nav-section-title">Core Management</div>
+        <a class="admin-nav-item active" data-tab="overview">
+            <i class="ri-dashboard-3-line"></i>
+            <span>Overview</span>
+        </a>
+        <a class="admin-nav-item" data-tab="products">
+            <i class="ri-store-2-line"></i>
+            <span>Products & Catalogue</span>
+            {% if summary and summary.low_stock_count > 0 %}
+                <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">{{ summary.low_stock_count }} Low</span>
+            {% endif %}
+        </a>
+        <a class="admin-nav-item" data-tab="actors">
+            <i class="ri-team-line"></i>
+            <span>System Actors</span>
+            {% if summary and summary.pending_riders > 0 %}
+                <span class="badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">{{ summary.pending_riders }} Vetting</span>
+            {% endif %}
+        </a>
+
+        <div class="nav-section-title">Operations & Quality</div>
+        <a class="admin-nav-item" data-tab="reviews">
+            <i class="ri-star-smile-line"></i>
+            <span>Reviews & Feedback</span>
+        </a>
+        <a class="admin-nav-item" data-tab="audit">
+            <i class="ri-history-line"></i>
+            <span>Audit Trail</span>
+        </a>
+
+        <div class="nav-section-title">Governance</div>
+        <a class="admin-nav-item" data-tab="security">
+            <i class="ri-shield-keyhole-line"></i>
+            <span>Auth & Security</span>
+            {% if is_superadmin %}
+                <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">Super</span>
+            {% else %}
+                <span class="badge rounded-pill bg-secondary" style="font-size: 0.65rem;">Read-only</span>
+            {% endif %}
+        </a>
+
+        <div class="nav-section-title">Personal</div>
+        <a class="admin-nav-item" data-tab="account">
+            <i class="ri-user-settings-line"></i>
+            <span>Account Settings</span>
+        </a>
+    </div>
+
+    <!-- Sidebar Footer / Identity -->
+    <div class="admin-sidebar-footer">
+        <a class="text-decoration-none rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
+           onclick="document.querySelector('[data-tab=account]').click()" style="cursor: pointer; width: 36px; height: 36px; background-color: {% if is_superadmin %}#D32F2F{% else %}#1A367E{% endif %}; font-size: 0.85rem;" title="View Account Settings">
+            {{ (admin_user.first_name[0] if admin_user and admin_user.first_name else 'A') | upper }}
+        </a>
+        <div class="flex-grow-1 overflow-hidden" onclick="document.querySelector('[data-tab=account]').click()" style="cursor: pointer;" title="View Account Settings">
+            <div class="fw-semibold text-truncate small" style="color: var(--text-heading);">
+                {{ admin_user.first_name if admin_user else 'Admin' }} {{ admin_user.last_name if admin_user else '' }}
+            </div>
+            <div class="small text-truncate" style="font-size: 0.72rem;">
+                {% if is_superadmin %}
+                    <span class="badge badge-bansi-red py-0 px-1">Superadmin (Owner)</span>
+                {% else %}
+                    <span class="badge badge-bansi-blue py-0 px-1">Store Admin ({{ admin_level | capitalize }})</span>
+                {% endif %}
+            </div>
+        </div>
+        <a href="{{ base_url }}/logout" class="btn btn-sm btn-link text-muted p-1 text-decoration-none" title="Sign Out">
+            <i class="ri-logout-box-r-line fs-5"></i>
+        </a>
+    </div>
+</aside>

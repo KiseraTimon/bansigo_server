@@ -40,12 +40,12 @@ class BaseRepository(Generic[T]):
         :return: List[TypeVar] | Any
         """
 
-        stmt = {
+        stmt = (
             select(self.model)
             .order_by(self.model.id)
             .limit(per_page)
             .offset((page - 1) * per_page)
-        }
+        )
 
         return list((await self.db.execute(stmt)).scalars().all())
 

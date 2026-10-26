@@ -40,11 +40,11 @@
 		<!--CSS-->
 		<link
 			rel="stylesheet"
-			href="{{url_for('static', filename='css/style.css')}}?v=2.3"
+			href="{{url_for('static', path='css/style.css')}}?v=2.3"
 		/>
 		<link
 			rel="stylesheet"
-			href="{{url_for('static', filename='css/effects.css')}}?v=2.3"
+			href="{{url_for('static', path='css/effects.css')}}?v=2.3"
 		/>
 
 		<!--Custom CSS-->
@@ -108,7 +108,9 @@
 		{% endblock %}
 
 		<!--Slide-Over Cart Drawer Sidebar-->
-		{% include 'components/cart_drawer.html' %}
+		{% block cart_drawer %}
+			{% include 'components/cart_drawer.html' %}
+		{% endblock %}
 
 		<!--Page Body-->
 		<main class="site-main-content flex-grow-1">
@@ -126,8 +128,9 @@
 
 		<!--Global Brand & Cart Configuration-->
 		<script>
-			window.SPERO_CONFIG = {
-				brandName: {{ (brand_settings.brand_name if brand_settings else 'SPERO Gadgets & Electronics') | tojson }},
+			window.BANSIGO_CONFIG = window.SPERO_CONFIG = {
+				brandName: {{ (brand_settings.brand_name if brand_settings else 'Bansi') | tojson }},
+				tagline: "Widest Variety, Lowest Prices",
 				currency: {{ (brand_settings.currency_code if brand_settings else 'KES') | tojson }},
 				whatsappNumber: {{ (brand_settings.clean_whatsapp if brand_settings and brand_settings.clean_whatsapp else '254700000000') | tojson }},
 				vatRate: {{ (brand_settings.vat_rate if brand_settings else 16.0) | tojson }},
@@ -137,7 +140,7 @@
 		</script>
 
 		<!--General Scripts-->
-		<script src="{{url_for('static', filename='js/main.js')}}"></script>
+		<script src="{{url_for('static', path='js/main.js')}}"></script>
 
 		<!--Custom JS-->
 		{% block js %}{% endblock %}
