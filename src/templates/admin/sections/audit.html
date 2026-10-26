@@ -1,0 +1,77 @@
+<!-- src/templates/admin/sections/audit.html -->
+<div class="admin-tab-pane fade-in" id="auditTab">
+    <div class="bansi-card p-4">
+        <!-- Section Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-history-line text-primary me-2"></i>System Security & Operations Audit Trail
+                </h5>
+                <p class="text-muted small mb-0">Immutable record of price modifications, stock take adjustments, rider vetting approvals, and administrative actions.</p>
+            </div>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                <i class="ri-lock-line me-1"></i> Append-Only Ledger
+            </span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table bansi-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Timestamp (UTC)</th>
+                        <th>Action</th>
+                        <th>Target Entity</th>
+                        <th>Entity ID</th>
+                        <th>Actor ID</th>
+                        <th>IP / Request ID</th>
+                        <th>Before & After Snapshot</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if audits and audits|length > 0 %}
+                        {% for a in audits %}
+                            <tr>
+                                <td class="font-monospace small text-muted">{{ a.created_at }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ a.action }}</span></td>
+                                <td class="fw-semibold">{{ a.entity_type | capitalize }}</td>
+                                <td><code>#{{ a.entity_id }}</code></td>
+                                <td>
+                                    {% if a.actor_id != '-' %}
+                                        <span class="badge badge-bansi-blue">Admin #{{ a.actor_id }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-muted">System</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small font-monospace text-muted">
+                                    {{ a.ip_address }}<br>
+                                    <span style="font-size: 0.68rem;">Req: {{ a.request_id }}</span>
+                                </td>
+                                <td>
+                                    {% if a.before or a.after %}
+                                        <details class="small">
+                                            <summary class="text-primary cursor-pointer">View JSON Diff</summary>
+                                            <div class="p-2 mt-1 rounded bg-dark text-light font-monospace small" style="font-size: 0.7rem; max-width: 320px; overflow-x: auto;">
+                                                {% if a.before %}<div><strong class="text-warning">Before:</strong> {{ a.before | tojson }}</div>{% endif %}
+                                                {% if a.after %}<div><strong class="text-success">After:</strong> {{ a.after | tojson }}</div>{% endif %}
+                                            </div>
+                                        </details>
+                                    {% else %}
+                                        <span class="text-muted small">No change diff</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="ri-history-line fs-2 d-block mb-2 text-muted"></i>
+                                <div class="fw-semibold">No audit logs recorded yet</div>
+                                <div class="small text-secondary">All administrative operations and catalogue modifications will be immutably recorded here.</div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
