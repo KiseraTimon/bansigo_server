@@ -1,20 +1,74 @@
+<!-- src/templates/admin/index.html -->
 <!--Template Reference-->
 {% extends 'template.html' %}
 
 <!--Title-->
-{% block title%}
-{% endblock %}
+{% block title %}Admin Console | BansiGo{% endblock %}
 
 <!--Custom CSS-->
 {% block css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/admin.css') }}?v=1.0">
 {% endblock %}
+
+<!--Exclude Storefront Header, Cart Drawer & Footer from Admin Console-->
+{% block header %}{% endblock %}
+{% block cart_drawer %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block floating_whatsapp %}{% endblock %}
 
 <!--Body-->
 {% block body %}
-	<!--Sections-->
-	{% include "staff/sections/filename.html" %}
+    <!-- 1. Mobile & Small Screen Alert Constraint (Blocks screens < 1024px) -->
+    {% include "admin/sections/mobile_blocker.html" %}
+
+    <!-- 2. Desktop High-Density Workstation Layout -->
+    <div class="admin-wrapper">
+        <!-- Sidebar Navigation -->
+        {% include "admin/sections/sidebar.html" %}
+
+        <!-- Main Workspace -->
+        <div class="admin-main">
+            <!-- Topbar -->
+            {% include "admin/sections/topbar.html" %}
+
+            <!-- Dynamic Section Panes -->
+            <main class="admin-content">
+                <!-- Overview / KPIs Section -->
+                {% include "admin/sections/overview.html" %}
+
+                <!-- Catalogue & Product Variants Section -->
+                {% include "admin/sections/products.html" %}
+
+                <!-- System Actors (Staff, Riders, Admins, Customers) Section -->
+                {% include "admin/sections/actors.html" %}
+
+                <!-- Reviews & Feedback Section -->
+                {% include "admin/sections/reviews.html" %}
+
+                <!-- Security & Governance Section -->
+                {% include "admin/sections/security.html" %}
+
+                <!-- Security Audit Trail Section -->
+                {% include "admin/sections/audit.html" %}
+
+                <!-- Administrator Personal Account Settings -->
+                {% include "admin/sections/account.html" %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    {% include "admin/sections/product_modal.html" %}
+    {% include "admin/sections/bulk_modal.html" %}
+    {% include "admin/sections/confirmation_modal.html" %}
+    {% include "admin/sections/two_factor_modal.html" %}
 {% endblock %}
 
 <!--Custom JS-->
 {% block js %}
+<script>
+    window.ADMIN_BASE_URL = {{ base_url | tojson }};
+    window.IS_SUPERADMIN = {{ is_superadmin | tojson }};
+</script>
+<script src="{{ url_for('static', path='js/admin.js') }}?v=1.0"></script>
 {% endblock %}
