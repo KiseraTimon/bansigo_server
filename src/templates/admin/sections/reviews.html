@@ -1,0 +1,144 @@
+<!-- src/templates/admin/sections/reviews.html -->
+<div class="admin-tab-pane fade-in" id="reviewsTab">
+    <div class="bansi-card p-4">
+        <!-- Section Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-star-smile-line text-warning me-2"></i>Customer Reviews & Rider Performance
+                </h5>
+                <p class="text-muted small mb-0">Track shopper satisfaction, order delivery feedback, product complaints, and rider ratings across our retail network.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge badge-bansi-blue p-2">
+                    <i class="ri-thumb-up-line me-1"></i> {{ reviews.satisfaction_rate if reviews and reviews.total_reviews > 0 else 'N/A' }} Overall Satisfaction
+                </span>
+            </div>
+        </div>
+
+        <!-- Rating Summary Row (High-Density Top Bar) -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-4 col-md-5">
+                <div class="p-3 rounded-3 border text-center h-100 d-flex flex-column justify-content-center" style="background-color: var(--bg-subtle);">
+                    <div class="display-5 fw-bold text-warning mb-0">
+                        {{ reviews.average_rating if reviews and reviews.total_reviews > 0 else '0.00' }}
+                    </div>
+                    <div class="text-warning mb-1 fs-5">
+                        {% if reviews and reviews.total_reviews > 0 %}
+                            <i class="ri-star-fill"></i>
+                            <i class="ri-star-fill"></i>
+                            <i class="ri-star-fill"></i>
+                            <i class="ri-star-fill"></i>
+                            <i class="ri-star-fill"></i>
+                        {% else %}
+                            <i class="ri-star-line text-muted opacity-50"></i>
+                            <i class="ri-star-line text-muted opacity-50"></i>
+                            <i class="ri-star-line text-muted opacity-50"></i>
+                            <i class="ri-star-line text-muted opacity-50"></i>
+                            <i class="ri-star-line text-muted opacity-50"></i>
+                        {% endif %}
+                    </div>
+                    <div class="text-muted small">Based on {{ reviews.total_reviews if reviews else 0 }} verified order reviews</div>
+                </div>
+            </div>
+
+            <div class="col-lg-8 col-md-7">
+                <div class="p-3 rounded-3 border h-100 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0 small text-uppercase" style="letter-spacing: 0.05em; color: var(--text-muted);">Rating Distribution</h6>
+                        <span class="badge bg-light text-muted border small">{{ reviews.total_reviews if reviews else 0 }} Total</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mb-1 small">
+                        <span class="text-muted" style="width: 55px; font-size: 0.75rem;">5 Stars</span>
+                        <div class="progress flex-grow-1" style="height: 6px;">
+                            <div class="progress-bar bg-success" style="width: {{ reviews.five_star_pct if reviews and reviews.total_reviews > 0 else '0%' }}"></div>
+                        </div>
+                        <span class="text-muted text-end" style="width: 40px; font-size: 0.75rem;">{{ reviews.five_star_pct if reviews and reviews.total_reviews > 0 else '0%' }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mb-1 small">
+                        <span class="text-muted" style="width: 55px; font-size: 0.75rem;">4 Stars</span>
+                        <div class="progress flex-grow-1" style="height: 6px;">
+                            <div class="progress-bar bg-primary" style="width: {{ reviews.four_star_pct if reviews and reviews.total_reviews > 0 else '0%' }}"></div>
+                        </div>
+                        <span class="text-muted text-end" style="width: 40px; font-size: 0.75rem;">{{ reviews.four_star_pct if reviews and reviews.total_reviews > 0 else '0%' }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 small">
+                        <span class="text-muted" style="width: 55px; font-size: 0.75rem;">&le; 3 Stars</span>
+                        <div class="progress flex-grow-1" style="height: 6px;">
+                            <div class="progress-bar bg-danger" style="width: {{ reviews.critical_pct if reviews and reviews.total_reviews > 0 else '0%' }}"></div>
+                        </div>
+                        <span class="text-muted text-end" style="width: 40px; font-size: 0.75rem;">{{ reviews.critical_pct if reviews and reviews.total_reviews > 0 else '0%' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Log Arranged in Efficient Multi-Column Rows -->
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="fw-bold mb-0 text-dark" style="color: var(--text-heading);">
+                <i class="ri-chat-voice-line text-primary me-2"></i>Recent Customer Feedback & Reviews
+            </h6>
+            <span class="text-muted small">Arranged by recency</span>
+        </div>
+
+        <div class="row g-3 row-cols-1 row-cols-md-2 row-cols-xl-3">
+            {% if reviews and reviews.reviews and reviews.reviews|length > 0 %}
+                {% for r in reviews.reviews %}
+                    <div class="col">
+                        <div class="p-3 rounded-3 border h-100 bg-white d-flex flex-column justify-content-between shadow-xs transition-hover">
+                            <div>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="badge bg-light text-primary border font-monospace">{{ r.order_number }}</span>
+                                    <div class="text-warning small">
+                                        {% for i in range(r.rating) %}<i class="ri-star-fill"></i>{% endfor %}
+                                        {% for i in range(5 - r.rating) %}<i class="ri-star-line text-muted opacity-50"></i>{% endfor %}
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <span class="badge bg-secondary-subtle text-secondary py-0 px-2" style="font-size: 0.7rem;">
+                                        {{ r.target_type }}
+                                    </span>
+                                    {% if r.product_name %}
+                                        <span class="badge bg-light text-dark border py-0 px-2 text-truncate" style="font-size: 0.7rem; max-width: 140px;">
+                                            <i class="ri-shopping-basket-line me-1"></i>{{ r.product_name }}
+                                        </span>
+                                    {% endif %}
+                                    {% if r.rider_name %}
+                                        <span class="badge bg-light text-dark border py-0 px-2" style="font-size: 0.7rem;">
+                                            <i class="ri-ebike-line me-1"></i>{{ r.rider_name }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                                <p class="small text-dark mb-3" style="min-height: 48px; line-height: 1.45;">
+                                    &ldquo;{{ r.comment }}&rdquo;
+                                </p>
+                            </div>
+
+                            <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-auto">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="rounded-circle bg-danger-subtle text-danger fw-bold d-inline-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.75rem;">
+                                        {{ r.customer_name[:1] }}
+                                    </div>
+                                    <div class="small fw-semibold text-truncate" style="max-width: 140px;">
+                                        {{ r.customer_name }}
+                                    </div>
+                                </div>
+                                <span class="text-muted small" style="font-size: 0.72rem;">{{ r.date }}</span>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12 w-100">
+                    <div class="text-center py-5 rounded-3 border bg-light">
+                        <i class="ri-chat-quote-line text-muted display-4 mb-2 d-block"></i>
+                        <h6 class="fw-bold text-dark">No Customer Reviews Recorded Yet</h6>
+                        <p class="text-muted small mb-0">Customer ratings and delivery feedback will stream here in real time as completed orders are reviewed.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
