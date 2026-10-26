@@ -122,6 +122,7 @@ class ProductCreate(_ProductRules):
     name: _ProductName
     description: str | None = None
     image_url: str | None = Field(default=None, max_length=255)
+    gallery_images: list[str] | None = None
 
     unit: UnitType = UnitType.PIECE
     pack_size_label: str | None = Field(default=None, max_length=40)
@@ -140,7 +141,7 @@ class ProductUpdate(_ProductRules, _PatchMixin):
     """NOTE: stock is NOT editable here; it only moves through the inventory endpoints (the ledger)"""
     model_config = ConfigDict(extra="forbid")
     _NULLABLE: ClassVar[frozenset[str]] = frozenset({"brand_id", "barcode", "description", "image_url", "pack_size_label",
-                           "max_order_quantity", "compare_at_price", "cost_price"})
+                           "max_order_quantity", "compare_at_price", "cost_price", "gallery_images"})
 
     category_id: int | None = None
     brand_id: int | None = None
@@ -149,6 +150,7 @@ class ProductUpdate(_ProductRules, _PatchMixin):
     name: _ProductName | None = None
     description: str | None = None
     image_url: str | None = Field(default=None, max_length=255)
+    gallery_images: list[str] | None = None
 
     unit: UnitType | None = None
     pack_size_label: str | None = Field(default=None, max_length=40)
@@ -173,6 +175,7 @@ class ProductPublic(ORMModel):
     slug: str
     description: str | None
     image_url: str | None
+    gallery_images: list[str] | None = None
     category_id: int
     brand: BrandPublic | None
 
