@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import Settings, get_settings
 from src.database import get_db
 from src.exceptions import ForbiddenError, UnauthorizedError
-from src.models import Customer, User, UserRole
-from src.repositories import CustomerRepository, UserRepository
+from src.models import Admin, AdminLevel, Customer, User, UserRole
+from src.repositories import AdminRepository, CustomerRepository, UserRepository
 from src.security import decode_access_token
 from src.services import (
-    AddressService, AuthService, CatalogueService, DeliveryService, InventoryService, OrderService,
+    AddressService, AdminService, AuthService, CatalogueService, DeliveryService, InventoryService, OrderService,
     PaymentService, RefundService, RiderService, UserService, VerificationService,
 )
 
@@ -71,6 +71,10 @@ def get_rider_service(db: DbSession) -> RiderService:
 
 def get_delivery_service(settings: SettingsDep, db: DbSession) -> DeliveryService:
     return DeliveryService(db, settings)
+
+
+def get_admin_service(settings: SettingsDep, db: DbSession) -> AdminService:
+    return AdminService(db, settings)
 
 
 @lru_cache
@@ -153,6 +157,64 @@ async def get_current_customer(
 
 
 CurrentCustomer = Annotated[Customer, Depends(get_current_customer)]
+
+
+async def get_current_admin(
+    request: Request,
+    settings: SettingsDep,
+    db: DbSession,
+) -> tuple[User, Admin]:
+    """
+    resolves the active administrator via Authorization header or session cookie
+    """
+    token: str | None = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+    elif "access_token" in request.cookies:
+        token = request.cookies.get("access_token")
+
+    if not token:
+        raise UnauthorizedError("Authentication credentials not provided")
+
+    try:
+        payload = decode_access_token(token, settings.secret_key.get_secret_value())
+        user_id = int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise UnauthorizedError("Invalid or expired session token")
+
+    user = await UserRepository(db).get_by_id(user_id)
+    if (user is None) or (not user.is_active) or (user.deleted_at is not None):
+        raise UnauthorizedError("User account not active")
+
+    if user.role != UserRole.ADMIN:
+        raise ForbiddenError("Administrative privileges required")
+
+    admin = await AdminRepository(db).get_by_user_id(user.id)
+    if admin is None:
+        # Default or bootstrap to SUPER for first admin or OPERATIONS
+        admin = Admin(user_id=user.id, level=AdminLevel.SUPER)
+        db.add(admin)
+        await db.commit()
+        await db.refresh(admin)
+
+    return user, admin
+
+
+CurrentAdmin = Annotated[tuple[User, Admin], Depends(get_current_admin)]
+
+
+def require_admin_level(*levels: AdminLevel):
+    """
+    privilege gate ensuring an administrator holds required authority (e.g. SUPER)
+    """
+    async def checker(admin_tuple: CurrentAdmin) -> tuple[User, Admin]:
+        _, admin = admin_tuple
+        if admin.level not in levels:
+            raise ForbiddenError("Insufficient administrator privileges for this operation")
+        return admin_tuple
+
+    return checker
 
 
 # Daraja callbacks (no user logs in: these requests come from Safaricom)
