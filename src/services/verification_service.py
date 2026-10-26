@@ -197,6 +197,36 @@ class VerificationService:
         await self.db.commit()
 
 
+    async def start_two_factor_setup(self, user: User) -> Mail:
+        """
+        initiates two-factor authentication challenge via email OTP
+        """
+        code = await self.issue_code(user, TokenPurpose.TWO_FACTOR_AUTH)
+        return self._compose(user, code, "Two-Factor Authentication Security Code", "verify and enable two-factor authentication (2FA)")
+
+
+    async def confirm_two_factor(self, user: User, code: str) -> User:
+        """
+        verifies the one-time code and enables 2FA for the user
+        """
+        await self.consume_code(user, TokenPurpose.TWO_FACTOR_AUTH, code)
+        user.two_factor_enabled = True
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+
+    async def disable_two_factor(self, user: User) -> User:
+        """
+        disables 2FA on the user account
+        """
+        user.two_factor_enabled = False
+        await self.tokens.delete_for(user.id, TokenPurpose.TWO_FACTOR_AUTH)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+
     def _compose(self, user: User, code: str, subject: str, action: str) -> Mail:
         """
         composes the mail body

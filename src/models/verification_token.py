@@ -16,6 +16,7 @@ class TokenPurpose(enum.Enum):
     """
     VERIFY_EMAIL = "verify_email"
     RESET_PASSWORD = "reset_password"
+    TWO_FACTOR_AUTH = "two_factor_auth"
 
 
 class VerificationToken(Base, TimestampMixin):
