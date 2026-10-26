@@ -1,0 +1,175 @@
+<!-- src/templates/admin/sections/product_modal.html -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="productModalTitle" style="color: var(--text-heading);">
+                    <i class="ri-shopping-bag-3-line text-danger"></i>
+                    <span>Add Product / Size Variant</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="productForm">
+                <input type="hidden" id="modalProductId" name="product_id" value="">
+                <input type="hidden" id="modalImageUrl" name="image_url" value="">
+                <input type="hidden" id="modalGalleryImages" name="gallery_images" value="[]">
+
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <!-- Product Title / Base Name -->
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold" for="modalName">Product Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control bansi-input" id="modalName" name="name" required placeholder="e.g. Pembe Maize Meal">
+                        </div>
+
+                        <!-- Pack Size Label (for variants) -->
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalPackSize">Pack Size / Variant Label</label>
+                            <input type="text" class="form-control bansi-input" id="modalPackSize" name="pack_size_label" placeholder="e.g. 1 kg, 500 ml, 2 L">
+                            <small class="text-muted" style="font-size: 0.7rem;">Distinguishes size variants (e.g. 1kg vs 2kg)</small>
+                        </div>
+
+                        <!-- SKU & Barcode -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="modalSku">SKU Code <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control bansi-input font-monospace text-uppercase" id="modalSku" name="sku" required placeholder="e.g. FLOUR-PEMBE-1KG">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold" for="modalBarcode">Barcode (EAN/UPC/GTIN)</label>
+                            <input type="text" class="form-control bansi-input font-monospace" id="modalBarcode" name="barcode" placeholder="e.g. 616110001001">
+                        </div>
+
+                        <!-- Category & Brand & Unit -->
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold" for="modalCategoryId">Category <span class="text-danger">*</span></label>
+                            <select class="form-select bansi-input" id="modalCategoryId" name="category_id" required>
+                                <option value="">-- Select Category --</option>
+                                {% if categories %}
+                                    {% for c in categories %}
+                                        <option value="{{ c.id }}">{{ c.name }}</option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="1">General Goods</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalBrandId">Brand</label>
+                            <select class="form-select bansi-input" id="modalBrandId" name="brand_id">
+                                <option value="">None / Unbranded</option>
+                                {% if brands %}
+                                    {% for b in brands %}
+                                        <option value="{{ b.id }}">{{ b.name }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold" for="modalUnit">Sale Unit</label>
+                            <select class="form-select bansi-input" id="modalUnit" name="unit">
+                                <option value="piece">Piece (Packet/Tin)</option>
+                                <option value="kg">Kilogram (KG)</option>
+                                <option value="g">Gram (g)</option>
+                                <option value="litre">Litre (L)</option>
+                                <option value="ml">Millilitre (ml)</option>
+                                <option value="pack">Pack / Bundle</option>
+                            </select>
+                        </div>
+
+                        <!-- Pricing Fields -->
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalPrice">Selling Price (KES) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control bansi-input fw-bold" id="modalPrice" name="price" required placeholder="0.00">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalComparePrice">Compare-At Price (Was KES)</label>
+                            <input type="number" step="0.01" class="form-control bansi-input text-muted" id="modalComparePrice" name="compare_at_price" placeholder="Higher than price">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalCostPrice">Cost Price (KES)</label>
+                            <input type="number" step="0.01" class="form-control bansi-input font-monospace" id="modalCostPrice" name="cost_price" placeholder="Internal purchase cost">
+                            <small class="text-muted" style="font-size: 0.7rem;">Staff/Admin confidential</small>
+                        </div>
+
+                        <!-- Tax Treatment & Stock -->
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalTaxClass">VAT Treatment</label>
+                            <select class="form-select bansi-input" id="modalTaxClass" name="tax_class">
+                                <option value="standard">Standard Rate (16%)</option>
+                                <option value="zero_rated">Zero Rated (0%)</option>
+                                <option value="exempt">Exempt</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalStock">Initial Stock on Hand</label>
+                            <input type="number" step="0.001" class="form-control bansi-input" id="modalStock" name="initial_stock" value="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold" for="modalReorderLevel">Reorder Minimum Alert</label>
+                            <input type="number" step="0.001" class="form-control bansi-input" id="modalReorderLevel" name="reorder_level" value="10">
+                        </div>
+
+                        <!-- Previewable & Arrangeable Product Image Gallery -->
+                        <div class="col-12">
+                            <div class="p-3 rounded-3 border" style="background-color: var(--bg-subtle);">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <label class="form-label small fw-bold mb-0 text-dark">
+                                        <i class="ri-image-line me-1 text-primary"></i> Product Image Gallery & Arrangeable Cover
+                                    </label>
+                                    <span class="badge bg-secondary-subtle text-secondary small" id="galleryCountBadge">0 Images</span>
+                                </div>
+                                <div class="text-muted small mb-2" style="font-size: 0.75rem;">
+                                    Add image URLs below. You can preview, reorder (move left/right), set the primary thumbnail cover, or remove images.
+                                </div>
+
+                                <div class="input-group input-group-sm mb-3">
+                                    <input type="url" class="form-control bansi-input" id="newImageUrlInput"
+                                           placeholder="Enter public image URL (e.g. https://... or /static/images/products/item.jpg)">
+                                    <button class="btn btn-outline-primary" type="button" id="addImageUrlBtn" title="Add Image to Gallery">
+                                        <i class="ri-add-line me-1"></i> Add Image
+                                    </button>
+                                </div>
+
+                                <!-- Image Previews & Arrangeable Strip -->
+                                <div id="galleryPreviewContainer" class="d-flex flex-wrap gap-2 min-h-60 p-2 rounded bg-white border">
+                                    <!-- Rendered dynamically by admin.js -->
+                                    <div class="text-muted small py-2 text-center w-100" id="galleryEmptyMessage">
+                                        <i class="ri-image-add-line fs-4 d-block text-secondary mb-1"></i>
+                                        No images added yet. Enter an image URL above to build the gallery.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Flags & Description -->
+                        <div class="col-md-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="modalAgeRestricted" name="is_age_restricted" value="true">
+                                <label class="form-check-label small" for="modalAgeRestricted">Age Restricted Product (Alcohol / Tobacco - requires customer age verification)</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold" for="modalDescription">Product Description</label>
+                            <textarea class="form-control bansi-input" id="modalDescription" name="description" rows="2" placeholder="Shelf and catalogue details, nutritional highlights, packaging notes..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top d-flex justify-content-between align-items-center">
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-danger d-none" id="modalDeleteProductBtn" onclick="deleteProductFromModal()">
+                            <i class="ri-delete-bin-line me-1"></i> Delete Product
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-bansi-red px-4" id="saveProductBtn">
+                            <i class="ri-save-line me-1"></i> Save Product SKU
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

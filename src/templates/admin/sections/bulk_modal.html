@@ -1,0 +1,59 @@
+<!-- src/templates/admin/sections/bulk_modal.html -->
+<div class="modal fade" id="bulkModal" tabindex="-1" aria-labelledby="bulkModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title fw-bold" id="bulkModalLabel" style="color: var(--text-heading);"><i class="ri-file-excel-2-line text-success me-2"></i>Bulk Product Spreadsheets</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- 1. Download Template & Guidelines -->
+                <div class="p-3 rounded-3 mb-4 border" style="background-color: var(--bg-subtle);">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div class="fw-semibold small"><i class="ri-information-line text-primary me-1"></i>Spreadsheet Format Guide</div>
+                        <a href="{{ base_url }}/products/template" class="btn btn-sm btn-bansi-outline-blue py-1 px-2" style="font-size: 0.75rem;">
+                            <i class="ri-download-line me-1"></i> Sample Template
+                        </a>
+                    </div>
+                    <ul class="text-muted small mb-0 ps-3" style="font-size: 0.78rem;">
+                        <li><strong>Variants:</strong> Group items with matching names and distinct <code>pack_size_label</code> (e.g. 1 kg, 2 kg).</li>
+                        <li><strong>Images:</strong> Include complete image URLs or relative static paths in <code>image_url</code>.</li>
+                        <li><strong>Units:</strong> <code>piece</code>, <code>kg</code>, or <code>litre</code>.</li>
+                        <li><strong>Tax:</strong> <code>standard</code> (16%), <code>zero_rated</code> (0%), or <code>exempt</code>.</li>
+                    </ul>
+                </div>
+
+                <!-- 2. Direct Export Option -->
+                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 mb-4 border bg-white">
+                    <div>
+                        <div class="fw-semibold small text-dark">Export Current Catalogue</div>
+                        <div class="text-muted" style="font-size: 0.72rem;">Download full inventory with live quantities and costs.</div>
+                    </div>
+                    <a href="{{ base_url }}/products/export" class="btn btn-sm btn-outline-secondary py-1 px-3">
+                        <i class="ri-file-download-line me-1"></i> Export CSV
+                    </a>
+                </div>
+
+                <!-- 3. Upload File Form -->
+                <form id="bulkUploadForm">
+                    <div class="mb-3">
+                        <label for="bulkCsvFile" class="form-label small fw-semibold">Select CSV Spreadsheet to Import</label>
+                        <input type="file" class="form-control bansi-input" id="bulkCsvFile" accept=".csv" required>
+                        <div class="form-text" style="font-size: 0.72rem;">Supports UTF-8 CSV exports from Excel, Numbers, and Google Sheets.</div>
+                    </div>
+
+                    <div class="alert alert-info py-2 small mb-0 border-0" style="font-size: 0.75rem;">
+                        <i class="ri-shield-check-line me-1"></i> Existing SKUs will be updated with new prices and stock balances; new SKUs will be created and staged in audit logs.
+                    </div>
+
+                    <div class="mt-4 text-end">
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-2" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-sm btn-bansi-red px-4" id="bulkUploadBtn">
+                            <i class="ri-upload-cloud-2-line me-1"></i> Upload Spreadsheet
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
