@@ -1,0 +1,237 @@
+<!-- src/templates/admin/sections/security.html -->
+<div class="admin-tab-pane fade-in" id="securityTab">
+    <div class="bansi-card p-4">
+        <!-- Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-shield-keyhole-line text-danger me-2"></i>Authentication & Security Governance
+                </h5>
+                <p class="text-muted small mb-0">Oversee administrator multi-factor security, session lifetimes, customer verification standards, Daraja gateway protection, and platform rules.</p>
+            </div>
+            {% if is_superadmin %}
+                <span class="badge badge-bansi-red px-3 py-2">
+                    <i class="ri-admin-line me-1"></i> Superadmin Control Active
+                </span>
+            {% else %}
+                <span class="badge bg-secondary-subtle text-secondary px-3 py-2 border">
+                    <i class="ri-lock-line me-1"></i> Read-Only: Operations Admin Scoped
+                </span>
+            {% endif %}
+        </div>
+
+        {% if not is_superadmin %}
+            <div class="alert alert-warning d-flex align-items-center gap-3 p-3 mb-4 rounded-3 border-0" role="alert">
+                <i class="ri-shield-alert-line fs-3 text-warning"></i>
+                <div class="small">
+                    <strong>Owner Security Gate:</strong> System-wide security configurations, M-Pesa settings, and session timeouts can only be altered by business owners (Superadmin level). Store managers may manage their own 2FA credentials and view operational policies below.
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- 1. Administrator Two-Factor Authentication (2FA) Module -->
+        <div class="p-4 rounded-3 border mb-4 bg-white shadow-xs">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle {% if admin_user and admin_user.two_factor_enabled %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %} d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="ri-shield-check-line fs-3"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--text-heading);">Two-Factor Authentication (2FA)</h6>
+                            {% if admin_user and admin_user.two_factor_enabled %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                    <i class="ri-check-line me-1"></i> Enabled & Protected
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                    <i class="ri-alert-line me-1"></i> Disabled
+                                </span>
+                            {% endif %}
+                        </div>
+                        <p class="text-muted small mb-0 mt-1">
+                            Requires a secure one-time verification code sent to <code class="text-primary">{{ admin_user.email if admin_user else 'your email' }}</code> whenever logging in to the administration console.
+                        </p>
+                    </div>
+                </div>
+                <div>
+                    {% if admin_user and admin_user.two_factor_enabled %}
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="disable2faBtn" title="Disable Two-Factor Authentication">
+                            <i class="ri-lock-unlock-line me-1"></i> Disable 2FA
+                        </button>
+                    {% else %}
+                        <button type="button" class="btn btn-sm btn-bansi-red px-3" id="start2faBtn" title="Enable Two-Factor Authentication">
+                            <i class="ri-shield-keyhole-line me-1"></i> Enable 2FA via Email
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <form id="securitySettingsForm">
+            <div class="row g-4">
+                <!-- 2. Session & Account Policies -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border h-100" style="background-color: var(--bg-subtle);">
+                        <h6 class="fw-bold mb-3" style="color: var(--bansi-blue);">
+                            <i class="ri-time-line me-2"></i>Session & Identity Governance
+                        </h6>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="tokenExpireMinutes">JWT Access Token Expiry (Minutes)</label>
+                            <input type="number" class="form-control bansi-input" id="tokenExpireMinutes" name="access_tokens_expire_minutes"
+                                   value="{{ security.access_tokens_expire_minutes if security else 30 }}" {% if not is_superadmin %}disabled{% endif %} min="5" max="1440">
+                            <div class="form-text" style="font-size: 0.72rem;">Controls inactivity timeout for administrative sessions and client tokens.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="maxAttempts">Max Verification & Login Attempts</label>
+                            <input type="number" class="form-control bansi-input" id="maxAttempts" name="verification_max_attempts"
+                                   value="{{ security.verification_max_attempts if security else 5 }}" {% if not is_superadmin %}disabled{% endif %} min="3" max="10">
+                            <div class="form-text" style="font-size: 0.72rem;">Account is locked after consecutive failed OTP or password challenges.</div>
+                        </div>
+
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="requireVerifiedEmail" name="require_verified_email"
+                                   value="true" {% if security and security.require_verified_email %}checked{% endif %} {% if not is_superadmin %}disabled{% endif %}>
+                            <label class="form-check-label small fw-semibold" for="requireVerifiedEmail">Enforce Verified Email on Signups</label>
+                            <div class="text-muted" style="font-size: 0.72rem;">Shoppers must verify their email via OTP before completing order checkout.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. OTP & Password Reset Policies -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border h-100" style="background-color: var(--bg-subtle);">
+                        <h6 class="fw-bold mb-3" style="color: var(--bansi-red);">
+                            <i class="ri-lock-password-line me-2"></i>OTP & Verification Codes
+                        </h6>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="codeTtlMinutes">Verification Code Lifetime (Minutes)</label>
+                            <input type="number" class="form-control bansi-input" id="codeTtlMinutes" name="verification_code_ttl_minutes"
+                                   value="{{ security.verification_code_ttl_minutes if security else 15 }}" {% if not is_superadmin %}disabled{% endif %} min="1" max="60">
+                            <div class="form-text" style="font-size: 0.72rem;">Validity duration of Email / SMS verification codes.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Verification Code Length</label>
+                            <input type="text" class="form-control bansi-input" value="{{ security.verification_code_length if security else 6 }} Digits" disabled>
+                            <div class="form-text" style="font-size: 0.72rem;">Cryptographically secure numeric token.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Resend Cooldown Period</label>
+                            <input type="text" class="form-control bansi-input" value="{{ security.verification_resend_cooldown_seconds if security else 60 }} Seconds" disabled>
+                            <div class="form-text" style="font-size: 0.72rem;">Prevents rapid retry bursts and email server throttling.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Shop & Financial Security Parameters -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border h-100 bg-white">
+                        <h6 class="fw-bold mb-3 text-dark">
+                            <i class="ri-money-dollar-circle-line me-2 text-warning"></i>Shop & Financial Policies
+                        </h6>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="unpaidOrderTtl">Unpaid Order TTL (Minutes)</label>
+                            <input type="number" class="form-control bansi-input" id="unpaidOrderTtl" name="unpaid_order_ttl_minutes"
+                                   value="{{ security.unpaid_order_ttl_minutes if security else 15 }}" {% if not is_superadmin %}disabled{% endif %} min="5" max="120">
+                            <div class="form-text" style="font-size: 0.72rem;">M-Pesa orders remaining unpaid past this window are automatically expired.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="vatRate">Standard VAT Rate (%)</label>
+                            <input type="number" step="0.01" class="form-control bansi-input" id="vatRate" name="vat_standard_rate"
+                                   value="{{ security.vat_standard_rate if security else '16.00' }}" {% if not is_superadmin %}disabled{% endif %} min="0" max="100">
+                            <div class="form-text" style="font-size: 0.72rem;">Platform standard value-added tax rate in percentage.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="riderFeeShare">Rider Delivery Fee Share Ratio (0.0 - 1.0)</label>
+                            <input type="number" step="0.01" class="form-control bansi-input font-monospace" id="riderFeeShare" name="rider_fee_share"
+                                   value="{{ security.rider_fee_share if security else '0.70' }}" {% if not is_superadmin %}disabled{% endif %} min="0" max="1">
+                            <div class="form-text" style="font-size: 0.72rem;">Portion of delivery charge disbursed to dispatch rider (e.g. 0.70 = 70%).</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. M-Pesa Daraja Gateway Posture -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border h-100 bg-white">
+                        <h6 class="fw-bold mb-3 text-success">
+                            <i class="ri-smartphone-line me-2"></i>M-Pesa Daraja Gateway Posture
+                        </h6>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="mpesaEnv">Gateway Environment</label>
+                            <select class="form-select bansi-input" id="mpesaEnv" name="mpesa_env" {% if not is_superadmin %}disabled{% endif %}>
+                                <option value="sandbox" {% if security and security.mpesa_env == 'sandbox' %}selected{% endif %}>Sandbox (Testing Simulation)</option>
+                                <option value="production" {% if security and security.mpesa_env == 'production' %}selected{% endif %}>Production (Live Safaricom Network)</option>
+                            </select>
+                            <div class="form-text" style="font-size: 0.72rem;">Toggle between Safaricom developer sandbox and live transaction processing.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="mpesaShortcode">M-Pesa Shortcode (Paybill / Till)</label>
+                            <input type="text" class="form-control bansi-input font-monospace" id="mpesaShortcode" name="mpesa_shortcode"
+                                   value="{{ security.mpesa_shortcode if security else '174379' }}" {% if not is_superadmin %}disabled{% endif %}>
+                            <div class="form-text" style="font-size: 0.72rem;">Registered Paybill or Store Till number for STK Push requests.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold" for="stkWindow">STK Push Response Window (Seconds)</label>
+                            <input type="number" class="form-control bansi-input" id="stkWindow" name="mpesa_stk_window_seconds"
+                                   value="{{ security.mpesa_stk_window_seconds if security else 90 }}" {% if not is_superadmin %}disabled{% endif %} min="30" max="300">
+                            <div class="form-text" style="font-size: 0.72rem;">Duration phone prompt is considered active before timeout.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. System & Infrastructure Governance -->
+                <div class="col-12">
+                    <div class="p-4 rounded-3 border" style="background-color: var(--bg-subtle);">
+                        <h6 class="fw-bold mb-3 text-dark">
+                            <i class="ri-settings-4-line me-2 text-secondary"></i>Infrastructure & Logging
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold" for="logLevelSelect">System Log Level</label>
+                                <select class="form-select bansi-input" id="logLevelSelect" name="log_level" {% if not is_superadmin %}disabled{% endif %}>
+                                    <option value="DEBUG" {% if security and security.log_level == 'DEBUG' %}selected{% endif %}>DEBUG (Verbose)</option>
+                                    <option value="INFO" {% if security and security.log_level == 'INFO' %}selected{% endif %}>INFO (Standard Operations)</option>
+                                    <option value="WARNING" {% if security and security.log_level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                                    <option value="ERROR" {% if security and security.log_level == 'ERROR' %}selected{% endif %}>ERROR (Strict)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Admin Secret Portal Slug</label>
+                                <input type="text" class="form-control bansi-input font-monospace" value="/{{ security.admin_portal_path if security else 'console-hq' }}/admin" disabled>
+                                <div class="form-text" style="font-size: 0.72rem;">Configured via <code>ADMIN_PORTAL_PATH</code> environment variable.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Runtime Environment</label>
+                                <div class="d-flex align-items-center gap-2 pt-1">
+                                    <span class="badge bg-primary font-monospace">{{ security.app_env | upper if security else 'DEVELOPMENT' }}</span>
+                                    {% if security and security.debug %}
+                                        <span class="badge bg-warning text-dark font-monospace">DEBUG_MODE</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if is_superadmin %}
+                <div class="mt-4 text-end">
+                    <button type="submit" class="btn btn-sm btn-bansi-red px-4" id="saveSecurityBtn">
+                        <i class="ri-save-line me-1"></i> Save Security Configurations
+                    </button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
