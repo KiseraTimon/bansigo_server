@@ -1,0 +1,29 @@
+<!-- src/templates/errors.html -->
+{% extends 'template.html' %}
+
+{% block title %}Error {{ status_code }} | BansiGo{% endblock %}
+
+{% block header %}{% endblock %}
+{% block cart_drawer %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block body %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center bg-light p-4">
+    <div class="card shadow-lg border-0 text-center p-5" style="max-width: 540px; border-radius: 16px;">
+        <div class="mb-3">
+            <img src="/static/images/logo.png" alt="Bansi Logo" height="72" onerror="this.style.display='none'">
+        </div>
+        <div class="display-3 fw-bold text-danger mb-2">{{ status_code }}</div>
+        <h3 class="fw-semibold text-dark mb-3">{{ title }}</h3>
+        <p class="text-muted mb-4">{{ content }}</p>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary me-2 px-4 rounded-pill">
+                <i class="ri-arrow-left-line me-1"></i> Go Back
+            </a>
+            <a href="/" class="btn btn-danger px-4 rounded-pill" style="background-color: #D32F2F;">
+                <i class="ri-home-line me-1"></i> Return Home
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
