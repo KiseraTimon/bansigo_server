@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # security configurations
     secret_key: SecretStr = Field(min_length=32)
     access_tokens_expire_minutes: int = Field(30, gt=0)
+    admin_portal_path: str = Field(
+        default="console-hq",
+        validation_alias=AliasChoices("admin_portal_path", "admin_secret_slug")
+    )
 
 
     # database configurations
