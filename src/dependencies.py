@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import Settings, get_settings
 from src.database import get_db
 from src.exceptions import ForbiddenError, UnauthorizedError
+from src.helpers.oauth_verifier import OAuthVerifier
 from src.models import Admin, AdminLevel, Customer, User, UserRole
 from src.repositories import AdminRepository, CustomerRepository, UserRepository
 from src.security import decode_access_token
@@ -31,6 +32,10 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 # service factories
 def get_auth_service(settings: SettingsDep, db: DbSession) -> AuthService:
     return AuthService(db, settings)
+
+
+def get_oauth_verifier(settings: SettingsDep) -> OAuthVerifier:
+    return OAuthVerifier(settings)
 
 
 def get_user_service(db: DbSession) -> UserService:
@@ -160,43 +165,15 @@ CurrentCustomer = Annotated[Customer, Depends(get_current_customer)]
 
 
 async def get_current_admin(
-    request: Request,
-    settings: SettingsDep,
-    db: DbSession,
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))], db: DbSession
 ) -> tuple[User, Admin]:
     """
-    resolves the active administrator via Authorization header or session cookie
+    resolves the Administrator profile record tied to the authenticated User.
+    Ensures active status and valid administrative permissions.
     """
-    token: str | None = None
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header[7:].strip()
-    elif "access_token" in request.cookies:
-        token = request.cookies.get("access_token")
-
-    if not token:
-        raise UnauthorizedError("Authentication credentials not provided")
-
-    try:
-        payload = decode_access_token(token, settings.secret_key.get_secret_value())
-        user_id = int(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
-        raise UnauthorizedError("Invalid or expired session token")
-
-    user = await UserRepository(db).get_by_id(user_id)
-    if (user is None) or (not user.is_active) or (user.deleted_at is not None):
-        raise UnauthorizedError("User account not active")
-
-    if user.role != UserRole.ADMIN:
-        raise ForbiddenError("Administrative privileges required")
-
     admin = await AdminRepository(db).get_by_user_id(user.id)
     if admin is None:
-        # Default or bootstrap to SUPER for first admin or OPERATIONS
-        admin = Admin(user_id=user.id, level=AdminLevel.SUPER)
-        db.add(admin)
-        await db.commit()
-        await db.refresh(admin)
+        raise ForbiddenError("Account is not a system administrator")
 
     return user, admin
 
