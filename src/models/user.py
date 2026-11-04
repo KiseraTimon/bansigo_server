@@ -42,14 +42,18 @@ class User(Base, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(50), nullable=False)
     username: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    phone: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, unique=True)
     picture: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, default=None)
 
     # credentials
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # server fields
     role: Mapped[UserRole] = mapped_column(str_enum(UserRole), nullable=False, default=UserRole.CUSTOMER)
+
+    # auth provider federation
+    auth_provider: Mapped[str] = mapped_column(String(20), nullable=False, default="local", server_default="local")
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True, index=True)
 
     # truth fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
@@ -74,3 +78,8 @@ class User(Base, TimestampMixin):
     __table_args__ = (
         Index('idx_user_role_active', 'role', 'is_active'),
     )
+
+    @property
+    def is_profile_complete(self) -> bool:
+        """whether customer has supplied their phone number for orders & deliveries"""
+        return bool(self.phone)
