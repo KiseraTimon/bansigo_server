@@ -21,7 +21,7 @@ class UserRepository(BaseRepository[User]):
 
     async def find_by_login(self, identifier: str) -> Optional[User]:
         """
-        login lookup by email or password.
+        login lookup by username or email.
         :param identifier: str
         :return: User | Any | None
         """
@@ -31,6 +31,28 @@ class UserRepository(BaseRepository[User]):
             .where(or_(User.username == identifier, User.email == identifier))
         )
 
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def find_by_email(self, email: str) -> Optional[User]:
+        """
+        lookup by exact email address.
+        :param email: str
+        :return: Optional[User]
+        """
+
+        stmt = select(User).where(User.email == email.strip().lower())
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+
+    async def find_by_firebase_uid(self, uid: str) -> Optional[User]:
+        """
+        lookup by unique federated Firebase UID.
+        :param uid: str
+        :return: Optional[User]
+        """
+
+        stmt = select(User).where(User.firebase_uid == uid)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
 
