@@ -115,6 +115,21 @@ class Settings(BaseSettings):
     mpesa_http_timeout: float = Field(15.0, gt=0)
 
 
+    # social and Firebase authentication
+    firebase_project_id: str = "bansigo-customer"
+    firebase_api_key: SecretStr | None = None
+    firebase_auth_domain: str = "bansigo-customer.firebaseapp.com"
+    firebase_storage_bucket: str = "bansigo-customer.firebasestorage.app"
+    firebase_messaging_sender_id: str = "624770085167"
+    firebase_app_id: str = "1:624770085167:web:f8617d01eb64d9ca3c71da"
+    firebase_measurement_id: str = "G-GN0J89BE0D"
+
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    facebook_app_id: str | None = None
+    facebook_app_secret: SecretStr | None = None
+
+
     # logging configurations
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_dir: Path = Path("logs")
