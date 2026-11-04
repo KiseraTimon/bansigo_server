@@ -1,10 +1,11 @@
 # src/schemas/auth.py
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .types import Email, Password
+from .types import Email, Password, Phone
+from .user import UserPrivate
 
 
 class Token(BaseModel):
@@ -24,7 +25,6 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: Password
     new_password_confirm: str
-
 
     @model_validator(mode="after")
     def _match(self):
@@ -81,3 +81,44 @@ class PasswordResetConfirm(BaseModel):
             raise ValueError("passwords do not match")
 
         return self
+
+
+# social and OAuth schemas
+class SocialAuthRequest(BaseModel):
+    """
+    payload sent by frontend when logging in with Firebase, Google, or Facebook
+    """
+    provider: Literal["firebase", "google", "facebook"] = "firebase"
+    token: str = Field(min_length=1, description="Firebase ID token, Google ID token, or Facebook access token")
+    phone: Phone | None = None
+
+
+class SocialAuthResponse(BaseModel):
+    """
+    response returned upon successful OAuth/social authentication
+    """
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPrivate
+    is_new_user: bool = False
+    requires_phone: bool = False
+
+
+class PhoneCompleteRequest(BaseModel):
+    """
+    payload for social login users to complete their profile with their phone number
+    """
+    phone: Phone
+
+
+class FirebasePublicConfig(BaseModel):
+    """
+    public Firebase configuration for client-side SDK initialization
+    """
+    api_key: str | None = None
+    auth_domain: str
+    project_id: str
+    storage_bucket: str
+    messaging_sender_id: str
+    app_id: str
+    measurement_id: str | None = None

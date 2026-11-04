@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from src.models.user import UserRole
-from src.schemas.types import  Email, Name, Password, Phone, Username
+from src.schemas.types import Email, Name, Password, Phone, Username
 
 
 class UserBase(BaseModel):
@@ -15,15 +15,17 @@ class UserBase(BaseModel):
     first_name: Name
     last_name: Name
     email: Email
-    phone: Phone
+    phone: Phone | None = None
 
 
 class UserCreate(UserBase):
     """
-    validation requirements for new account creations
+    validation requirements for standard manual account creations.
+    phone is strictly mandatory for manual registration.
     """
     model_config = ConfigDict(extra="forbid")
 
+    phone: Phone
     username: Username | None = None
     password: Password
     password_confirm: str
@@ -54,8 +56,6 @@ class UserUpdate(UserBase):
     """
     model_config = ConfigDict(extra="forbid")
 
-
-
     first_name: Name | None = None
     last_name: Name | None = None
     username: Username | None = None
@@ -83,6 +83,7 @@ class UserPrivate(UserBase):
     """
     data available to the authenticated user only
     """
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     username: str
@@ -90,6 +91,9 @@ class UserPrivate(UserBase):
     picture: str | None
     is_verified: bool
     is_active: bool
+    auth_provider: str = "local"
+    firebase_uid: str | None = None
+    is_profile_complete: bool = True
     last_login: datetime | None
     created_at: datetime
 
@@ -98,6 +102,7 @@ class UserPublic(BaseModel):
     """
     data about the user accessible publicly through APIs
     """
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     username: str

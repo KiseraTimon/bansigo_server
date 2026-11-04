@@ -1,7 +1,10 @@
 # src/schemas/__init__.py
 
 from .user import (UserCreate, UserUpdate, UserCreateByAdmin, UserPrivate, UserPublic)
-from .auth import (AccountDelete, PasswordChange, Token, CodeConfirm, PasswordResetConfirm, PasswordResetRequests)
+from .auth import (
+    AccountDelete, PasswordChange, Token, CodeConfirm, PasswordResetConfirm, PasswordResetRequests,
+    FirebasePublicConfig, PhoneCompleteRequest, SocialAuthRequest, SocialAuthResponse,
+)
 from .common import Detail, Page, PageParams
 from .catalogue import (
     BrandCreate, BrandPublic, BrandUpdate, CategoryCreate, CategoryPublic, CategoryTree, CategoryUpdate,
@@ -29,6 +32,7 @@ __all__ = [
     # users + auth
     "UserCreate", "UserUpdate", "UserCreateByAdmin", "UserPrivate", "UserPublic",
     "AccountDelete", "PasswordChange", "Token", "CodeConfirm", "PasswordResetConfirm", "PasswordResetRequests",
+    "FirebasePublicConfig", "PhoneCompleteRequest", "SocialAuthRequest", "SocialAuthResponse",
     # shared
     "Detail", "Page", "PageParams",
     # catalogue
