@@ -32,6 +32,7 @@ from .payment import (
     RefundStatus
 )
 from .review import Review, ReviewTargetType
+from .recommendation import RecommendationEvent
 
 
 # exportable
@@ -44,5 +45,5 @@ __all__ = [
     "OrderStatusHistory", "PaymentMethod", "PickStatus", "User", "UserRole",
     "Payment", "PaymentChannel", "PaymentEvent", "PaymentEventSource", "PaymentStatus",
     "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus",
-    "Review", "ReviewTargetType",
+    "Review", "ReviewTargetType", "RecommendationEvent",
 ]

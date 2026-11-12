@@ -19,12 +19,14 @@ from .order import (
     StaffStatusChange, StatusHistoryOut,
 )
 from .payment import (
-    C2BAck, C2BNotification, CashPaymentIn, DarajaAck, PaymentOut, RefundOut, RefundRejectIn, RefundRequestIn,
+    C2BAck, C2BNotification, CashPaymentIn, DarajaAck, ManualPaymentIn, PaymentOut, RefundOut, RefundRejectIn, RefundRequestIn,
     StkCallbackEnvelope, StkPushRequest,
 )
 from .delivery import (
-    DeliveryAssign, DeliveryComplete, DeliveryFail, DeliveryOut, DeliveryRespond, HandoverCodeOut, RiderAdminOut,
-    RiderApply, RiderDecision, RiderGoStatus, RiderLocation, RiderOut, RiderPublic,
+    CoverageCheckResponse, DeliveryAssign, DeliveryComplete, DeliveryEstimateRequest, DeliveryEstimateResponse,
+    DeliveryFail, DeliveryOut, DeliveryRespond, DeliveryTrackingOut, HandoverCodeOut, RiderAdminOut,
+    RiderApply, RiderDecision, RiderDeliveryDetailOut, RiderGoStatus, RiderLocation, RiderNavigationOut,
+    RiderOut, RiderPublic,
 )
 
 
@@ -49,6 +51,8 @@ __all__ = [
     "C2BAck", "C2BNotification", "CashPaymentIn", "DarajaAck", "PaymentOut", "RefundOut", "RefundRejectIn",
     "RefundRequestIn", "StkCallbackEnvelope", "StkPushRequest",
     # riders + deliveries
-    "DeliveryAssign", "DeliveryComplete", "DeliveryFail", "DeliveryOut", "DeliveryRespond", "HandoverCodeOut",
-    "RiderAdminOut", "RiderApply", "RiderDecision", "RiderGoStatus", "RiderLocation", "RiderOut", "RiderPublic",
+    "CoverageCheckResponse", "DeliveryAssign", "DeliveryComplete", "DeliveryEstimateRequest", "DeliveryEstimateResponse",
+    "DeliveryFail", "DeliveryOut", "DeliveryRespond", "DeliveryTrackingOut", "HandoverCodeOut",
+    "RiderAdminOut", "RiderApply", "RiderDecision", "RiderDeliveryDetailOut", "RiderGoStatus", "RiderLocation",
+    "RiderNavigationOut", "RiderOut", "RiderPublic",
 ]

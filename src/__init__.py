@@ -30,6 +30,28 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         # idempotent database creation
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed default delivery zones for Migori if table is empty
+    from sqlalchemy import select
+    from src.database import AsyncSessionLocal
+    from src.models import DeliveryZone
+    from decimal import Decimal
+    async with AsyncSessionLocal() as session:
+        has_zones = (await session.execute(select(DeliveryZone).limit(1))).scalar_one_or_none()
+        if has_zones is None:
+            default_zones = [
+                DeliveryZone(name="Migori Town Central", delivery_fee=Decimal("50.00"), min_order_amount=Decimal("100.00"), estimated_minutes=20, is_active=True),
+                DeliveryZone(name="Kadika & Nyasare", delivery_fee=Decimal("70.00"), min_order_amount=Decimal("150.00"), estimated_minutes=30, is_active=True),
+                DeliveryZone(name="Kakrao & Oruba", delivery_fee=Decimal("90.00"), min_order_amount=Decimal("200.00"), estimated_minutes=35, is_active=True),
+                DeliveryZone(name="Suna West & Lichota", delivery_fee=Decimal("110.00"), min_order_amount=Decimal("250.00"), estimated_minutes=45, is_active=True),
+            ]
+            session.add_all(default_zones)
+            await session.commit()
+
+    # initialize OpenStreetMap road network graph router
+    from src.algorithms.route_engines import init_router
+    router = init_router()
+    app.state.road_router = router
     yield
 
     # shutdowns
