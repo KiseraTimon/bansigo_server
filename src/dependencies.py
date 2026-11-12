@@ -13,8 +13,8 @@ from config import Settings, get_settings
 from src.database import get_db
 from src.exceptions import ForbiddenError, UnauthorizedError
 from src.helpers.oauth_verifier import OAuthVerifier
-from src.models import Admin, AdminLevel, Customer, User, UserRole
-from src.repositories import AdminRepository, CustomerRepository, UserRepository
+from src.models import Admin, AdminLevel, Customer, Rider, User, UserRole
+from src.repositories import AdminRepository, CustomerRepository, RiderRepository, UserRepository
 from src.security import decode_access_token
 from src.services import (
     AddressService, AdminService, AuthService, CatalogueService, DeliveryService, InventoryService, OrderService,
@@ -80,6 +80,11 @@ def get_delivery_service(settings: SettingsDep, db: DbSession) -> DeliveryServic
 
 def get_admin_service(settings: SettingsDep, db: DbSession) -> AdminService:
     return AdminService(db, settings)
+
+
+def get_road_router():
+    from src.algorithms.route_engines import get_router
+    return get_router()
 
 
 @lru_cache
@@ -162,6 +167,22 @@ async def get_current_customer(
 
 
 CurrentCustomer = Annotated[Customer, Depends(get_current_customer)]
+
+
+async def get_current_rider(
+    user: Annotated[User, Depends(require_roles(UserRole.RIDER))], db: DbSession
+) -> Rider:
+    """
+    resolves the Rider profile record tied to the authenticated RIDER user.
+    """
+    rider = await RiderRepository(db).get_by_user_id(user.id)
+    if rider is None:
+        raise ForbiddenError("This account has no rider profile")
+    return rider
+
+
+CurrentRider = Annotated[Rider, Depends(get_current_rider)]
+RiderUser = Annotated[User, Depends(require_roles(UserRole.RIDER))]
 
 
 async def get_current_admin(
