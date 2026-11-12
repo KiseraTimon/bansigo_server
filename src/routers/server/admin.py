@@ -26,7 +26,7 @@ from src.dependencies import (
 )
 from src.exceptions import AppError, ForbiddenError, InvalidCredentialsError, NotFoundError, UnauthorizedError
 from src.helpers import (
-    export_products_to_csv, generate_sample_csv_template, import_products_from_csv,
+    export_products_to_csv, generate_sample_csv_template, import_products_from_csv, import_products_from_excel,
 )
 from src.models import (
     Admin, AdminLevel, ApprovalStatus, Inventory, Product, TaxClass, UnitType, User, UserRole,
@@ -560,12 +560,15 @@ async def bulk_upload_products_csv(
 ):
     user, _ = admin_ctx
     content_bytes = await file.read()
-    try:
-        csv_text = content_bytes.decode("utf-8-sig")  # Handles Excel UTF-8 BOM
-    except UnicodeDecodeError:
-        csv_text = content_bytes.decode("latin-1")
-
-    report = await import_products_from_csv(csv_text, actor_id=user.id, db=db)
+    filename = (file.filename or "").lower()
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        report = await import_products_from_excel(content_bytes, actor_id=user.id, db=db)
+    else:
+        try:
+            csv_text = content_bytes.decode("utf-8-sig")  # Handles Excel UTF-8 BOM
+        except UnicodeDecodeError:
+            csv_text = content_bytes.decode("latin-1")
+        report = await import_products_from_csv(csv_text, actor_id=user.id, db=db)
     return report
 
 
