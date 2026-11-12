@@ -72,7 +72,7 @@ class AuthService:
             username=data.username or await self._generate_username(data.first_name, data.last_name),
             email=data.email,
             phone=data.phone,
-            role=role,
+            role=(data.role if hasattr(data, "role") and data.role else None) or role,
             password_hash=await hash_password_async(data.password),
             auth_provider="local"
         )
@@ -213,6 +213,9 @@ class AuthService:
 
         if user.role is UserRole.CUSTOMER:
             user.customer = Customer()
+        elif user.role is UserRole.RIDER:
+            from src.models.rider import Rider
+            user.rider = Rider()
 
 
     async def _generate_username(self, first_name: str, last_name: str) -> str:
