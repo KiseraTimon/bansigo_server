@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -134,9 +134,91 @@ class DeliveryOut(ORMModel):
     failed_reason: str | None
     estimated_distance_m: int | None
     estimated_duration_s: int | None
+    routing_algorithm: str | None = None
+    pickup_latitude: Decimal | None = None
+    pickup_longitude: Decimal | None = None
 
 
 class HandoverCodeOut(BaseModel):
     """shown to the CUSTOMER; they read it to the rider at the door"""
     order_id: int
     handover_code: str
+
+
+# OpenStreetMap routing & tracking schemas
+
+class DeliveryEstimateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: Latitude
+    longitude: Longitude
+    address_id: int | None = None
+
+
+class DeliveryEstimateResponse(BaseModel):
+    is_deliverable: bool
+    distance_m: int
+    duration_s: int
+    estimated_minutes: int
+    delivery_fee: Decimal
+    routing_algorithm: str
+    supermarket_name: str
+    supermarket_coords: dict[str, float]
+    destination_coords: dict[str, float]
+    waypoints: list[list[float]] = []
+
+
+class CoverageCheckResponse(BaseModel):
+    is_covered: bool
+    distance_to_store_m: float
+    max_radius_km: float
+    supermarket_name: str
+    supermarket_coords: dict[str, float]
+
+
+class DeliveryTrackingOut(BaseModel):
+    order_id: int
+    order_number: str
+    delivery_id: int | None
+    status: str
+    is_delivered: bool
+    routing_algorithm: str | None = None
+    estimated_distance_m: int | None = None
+    estimated_duration_s: int | None = None
+    estimated_minutes: int | None = None
+    supermarket_location: dict[str, Any]
+    delivery_location: dict[str, Any]
+    rider: RiderPublic | None = None
+    rider_location: dict[str, Any] | None = None
+    route_waypoints: list[list[float]] = []
+    handover_code: str | None = None
+
+
+class RiderDeliveryDetailOut(BaseModel):
+    delivery_id: int
+    order_id: int
+    order_number: str
+    status: DeliveryStatus
+    requires_id_check: bool
+    rider_fee: Decimal
+    pickup_location: dict[str, Any]
+    dropoff_location: dict[str, Any]
+    customer_note: str | None = None
+    payment_method: str
+    cash_to_collect: Decimal | None = None
+    estimated_distance_m: int | None = None
+    estimated_duration_s: int | None = None
+    routing_algorithm: str | None = None
+    route_waypoints: list[list[float]] = []
+
+
+class RiderNavigationOut(BaseModel):
+    delivery_id: int
+    leg: str  # "to_supermarket" or "to_customer"
+    destination_name: str
+    distance_m: int
+    duration_s: int
+    estimated_minutes: int
+    routing_algorithm: str
+    steps: list[dict[str, Any]]
+    waypoints: list[list[float]]
