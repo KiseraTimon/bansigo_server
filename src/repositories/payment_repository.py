@@ -24,6 +24,10 @@ class PaymentRepository(BaseRepository[Payment]):
     async def get_by_idempotency_key(self, key: str) -> Optional[Payment]:
         return (await self.db.execute(select(Payment).where(Payment.idempotency_key == key))).scalar_one_or_none()
 
+    async def get_by_provider_receipt(self, receipt: str) -> Optional[Payment]:
+        stmt = select(Payment).where(Payment.provider_receipt == receipt)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
 
     async def get_by_checkout_id(self, checkout_request_id: str, *, for_update: bool = False) -> Optional[Payment]:
         stmt = select(Payment).where(Payment.provider_checkout_request_id == checkout_request_id)
