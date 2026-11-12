@@ -87,9 +87,12 @@ class AddressService:
         return address
 
 
-    async def _active_zone(self, zone_id: int) -> DeliveryZone:
-        zone = await self.zones.get_by_id(zone_id)
+    async def _active_zone(self, zone_id: int | None) -> DeliveryZone:
+        zone = await self.zones.get_by_id(zone_id) if zone_id else None
         if zone is None or not zone.is_active:
+            active = await self.zones.list_all(active_only=True)
+            if active:
+                return active[0]
             raise BusinessRuleError("We do not deliver to that zone yet")
         return zone
 
@@ -98,12 +101,13 @@ class AddressService:
         if await self.addresses.count_for_customer(customer.id) >= MAX_ADDRESSES_PER_CUSTOMER:
             raise BusinessRuleError(f"You can save at most {MAX_ADDRESSES_PER_CUSTOMER} addresses")
 
-        await self._active_zone(data.zone_id)
+        zone = await self._active_zone(data.zone_id)
 
         # the first address is the default; otherwise only if asked
         make_default = data.is_default or await self.addresses.count_for_customer(customer.id) == 0
 
-        address = Address(customer_id=customer.id, **data.model_dump(exclude={"is_default"}), is_default=make_default)
+        payload = data.model_dump(exclude={"is_default", "zone_id"})
+        address = Address(customer_id=customer.id, zone_id=zone.id, **payload, is_default=make_default)
         if make_default:
             await self.addresses.clear_default(customer.id)
 

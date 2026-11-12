@@ -31,7 +31,7 @@ from src.models import (
     OrderStatusHistory, PaymentMethod, PickStatus, RiderStatus, TaxClass, User,
 )
 from src.repositories import (
-    DeliveryRepository, OrderRepository, ProductRepository, RiderRepository, StaffRepository, AddressRepository,
+    DeliveryRepository, OrderRepository, ProductRepository, RiderRepository, StaffRepository, AddressRepository, DeliveryZoneRepository,
 )
 from src.schemas import CheckoutRequest, PickItemIn
 from src.security import make_handover_code
@@ -72,6 +72,7 @@ class OrderService:
         self.orders = OrderRepository(db)
         self.products = ProductRepository(db)
         self.addresses = AddressRepository(db)
+        self.zones = DeliveryZoneRepository(db)
         self.deliveries = DeliveryRepository(db)
         self.riders = RiderRepository(db)
         self.staff = StaffRepository(db)
@@ -118,6 +119,9 @@ class OrderService:
         """
         turns a basket into an order, or returns the order a previous identical attempt already created
         """
+        if not user.is_verified:
+            raise ForbiddenError("Email verification is required before placing an order. Please verify your email address.")
+
         existing = await self.orders.get_by_idempotency(customer.id, data.idempotency_key)
         if existing is not None:
             return existing
@@ -128,11 +132,22 @@ class OrderService:
         # destination + fee
         address, delivery_fee = None, ZERO
         if data.fulfilment_type is FulfilmentType.DELIVERY:
-            address = await self.addresses.get_for_customer(data.address_id, customer.id)
+            if data.address_id:
+                address = await self.addresses.get_for_customer(data.address_id, customer.id)
+            if address is None:
+                # Fallback: check if customer has a default address or any address
+                addresses = await self.addresses.list_for_customer(customer.id)
+                if addresses:
+                    address = next((a for a in addresses if a.is_default), addresses[0])
             if address is None:
                 raise NotFoundError("Delivery address not found")
             if address.zone is None or not address.zone.is_active:
-                raise BusinessRuleError("We do not deliver to this address yet")
+                active_zones = await self.zones.list_all(active_only=True)
+                if active_zones:
+                    address.zone = active_zones[0]
+                    address.zone_id = active_zones[0].id
+                else:
+                    raise BusinessRuleError("We do not deliver to this address yet")
             delivery_fee = address.zone.delivery_fee
 
         # lines: priced HERE, from the catalogue
@@ -315,6 +330,24 @@ class OrderService:
             requires_id_check=await self.orders.has_age_restricted_items(order.id),
             rider_fee=money(order.delivery_fee * self.settings.rider_fee_share),
         )
+        if order.delivery_latitude is not None and order.delivery_longitude is not None:
+            try:
+                from decimal import Decimal
+                from src.algorithms.route_engines import get_router
+                router = get_router()
+                route = router.route_from_supermarket(
+                    float(order.delivery_latitude),
+                    float(order.delivery_longitude),
+                )
+                delivery.estimated_distance_m = int(round(route.total_distance_m))
+                delivery.estimated_duration_s = int(round(route.total_duration_s))
+                delivery.routing_algorithm = route.algorithm.value
+                delivery.route_waypoints = route.to_waypoints_json()
+                delivery.pickup_latitude = Decimal(str(router.supermarket_coords[0]))
+                delivery.pickup_longitude = Decimal(str(router.supermarket_coords[1]))
+            except Exception:
+                pass
+
         self.db.add(delivery)
         await self.db.flush()
 
