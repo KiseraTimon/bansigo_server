@@ -16,6 +16,7 @@
                         </a>
                     </div>
                     <ul class="text-muted small mb-0 ps-3" style="font-size: 0.78rem;">
+                        <li><strong>Excel & CSV:</strong> Supports both multi-sheet <code>.xlsx</code> workbooks and standard <code>.csv</code> files.</li>
                         <li><strong>Variants:</strong> Group items with matching names and distinct <code>pack_size_label</code> (e.g. 1 kg, 2 kg).</li>
                         <li><strong>Images:</strong> Include complete image URLs or relative static paths in <code>image_url</code>.</li>
                         <li><strong>Units:</strong> <code>piece</code>, <code>kg</code>, or <code>litre</code>.</li>
@@ -37,9 +38,9 @@
                 <!-- 3. Upload File Form -->
                 <form id="bulkUploadForm">
                     <div class="mb-3">
-                        <label for="bulkCsvFile" class="form-label small fw-semibold">Select CSV Spreadsheet to Import</label>
-                        <input type="file" class="form-control bansi-input" id="bulkCsvFile" accept=".csv" required>
-                        <div class="form-text" style="font-size: 0.72rem;">Supports UTF-8 CSV exports from Excel, Numbers, and Google Sheets.</div>
+                        <label for="bulkCsvFile" class="form-label small fw-semibold">Select Excel (.xlsx) or CSV Spreadsheet to Import</label>
+                        <input type="file" class="form-control bansi-input" id="bulkCsvFile" accept=".csv,.xlsx,.xls" required>
+                        <div class="form-text" style="font-size: 0.72rem;">Supports multi-sheet Excel (.xlsx) workbooks and UTF-8 CSV exports.</div>
                     </div>
 
                     <div class="alert alert-info py-2 small mb-0 border-0" style="font-size: 0.75rem;">

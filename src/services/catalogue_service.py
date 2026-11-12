@@ -17,7 +17,7 @@ from src.exceptions import AppError, BusinessRuleError, ConflictError, NotFoundE
 from src.models import Brand, Category, Inventory, OrderItem, Product, StockMovement
 from src.repositories import BrandRepository, CategoryRepository, ProductRepository
 from src.schemas import (
-    BrandCreate, BrandUpdate, CategoryCreate, CategoryTree, CategoryUpdate, Page, ProductCreate, ProductPublic,
+    BrandCreate, BrandUpdate, CategoryCreate, CategoryPublic, CategoryTree, CategoryUpdate, Page, ProductCreate, ProductPublic,
     ProductQuery, ProductStaff, ProductUpdate,
 )
 from utilities import slugify
@@ -43,7 +43,13 @@ class CatalogueService:
         one flat query, assembled into a nested tree in memory
         """
         rows = await self.categories.list_all(active_only)
-        nodes = {c.id: CategoryTree.model_validate(c) for c in rows}
+        nodes = {
+            c.id: CategoryTree(
+                **CategoryPublic.model_validate(c).model_dump(),
+                children=[],
+            )
+            for c in rows
+        }
 
         roots: list[CategoryTree] = []
         for c in rows:

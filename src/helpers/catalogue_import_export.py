@@ -2,8 +2,8 @@
 
 """
 helper module for bulk spreadsheet import and export of catalogue products.
-handles CSV serialization and deserialization, variant recognition,
-and audit logging.
+handles CSV and Excel (.xlsx) serialization and deserialization, variant recognition,
+multi-sheet workbook extraction, and audit logging.
 """
 
 import csv
@@ -11,6 +11,7 @@ import io
 from decimal import Decimal, InvalidOperation
 from typing import Any, Tuple
 
+import openpyxl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -166,17 +167,91 @@ async def export_products_to_csv(db: AsyncSession) -> str:
     return output.getvalue()
 
 
-async def import_products_from_csv(
-    csv_text: str,
+def _clean_cell_str(val: Any) -> str:
+    """Cleans up a cell value from Excel, preventing float decimal artifacts on integers."""
+    if val is None:
+        return ""
+    if isinstance(val, float) and val.is_integer():
+        return str(int(val))
+    return str(val).strip()
+
+
+def extract_rows_from_workbook_bytes(file_bytes: bytes) -> list[dict[str, Any]]:
+    """
+    extracts row dictionaries from an Excel (.xlsx) workbook bytes.
+    if 'All Products (Consolidated)' or a consolidated sheet exists, it extracts directly from it.
+    otherwise, it loops through each individual worksheet, skipping documentation sheets,
+    and deduplicates by SKU.
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+
+    # Check for consolidated sheet first
+    consolidated = [
+        name for name in wb.sheetnames
+        if "consolidated" in name.lower() or "all products" in name.lower()
+    ]
+
+    target_sheet_names = [consolidated[0]] if consolidated else [
+        name for name in wb.sheetnames
+        if not any(ignore in name.lower() for ignore in ("overview", "readme", "dictionary", "index", "guide"))
+    ]
+
+    all_rows: list[dict[str, Any]] = []
+    seen_skus: set[str] = set()
+
+    for sheet_name in target_sheet_names:
+        ws = wb[sheet_name]
+        if ws.max_row < 2:
+            continue
+
+        # Map header columns
+        header_map: dict[int, str] = {}
+        for col_idx in range(1, ws.max_column + 1):
+            val = ws.cell(row=1, column=col_idx).value
+            if val is not None:
+                cleaned = str(val).strip().lower()
+                if cleaned:
+                    header_map[col_idx] = cleaned
+
+        # Validate that this sheet contains catalogue headers
+        if "sku" not in header_map.values() or "name" not in header_map.values():
+            continue
+
+        for r in range(2, ws.max_row + 1):
+            row_dict: dict[str, Any] = {}
+            has_data = False
+            for col_idx, col_name in header_map.items():
+                val = ws.cell(row=r, column=col_idx).value
+                cleaned_val = _clean_cell_str(val)
+                row_dict[col_name] = cleaned_val
+                if cleaned_val:
+                    has_data = True
+
+            if not has_data:
+                continue
+
+            sku = (row_dict.get("sku") or "").strip().upper()
+            if sku:
+                if sku in seen_skus:
+                    continue
+                seen_skus.add(sku)
+                all_rows.append(row_dict)
+            else:
+                all_rows.append(row_dict)
+
+    return all_rows
+
+
+async def import_products_from_rows(
+    rows: list[dict[str, Any]],
     actor_id: int,
     db: AsyncSession,
 ) -> dict[str, Any]:
     """
-    parses CSV data, validates lines, and inserts or updates products and their inventory balances.
+    validates line dictionaries and inserts or updates products and their inventory balances.
     records audit log entries.
     """
     audit = AuditService(db)
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
 
     created_count = 0
     updated_count = 0
@@ -190,7 +265,7 @@ async def import_products_from_csv(
     brands = {b.name.strip().lower(): b for b in (await db.execute(brand_stmt)).scalars().all()}
 
     row_index = 1
-    for row in reader:
+    for row in rows:
         row_index += 1
         sku = (row.get("sku") or "").strip().upper()
         name = (row.get("name") or "").strip()
@@ -327,7 +402,6 @@ async def import_products_from_csv(
         else:
             # Create new product
             slug = slugify(name, 140)
-            # Ensure unique slug
             base_slug = slug
             n = 2
             while True:
@@ -383,3 +457,31 @@ async def import_products_from_csv(
         "errors": errors,
         "total_processed": row_index - 1,
     }
+
+
+async def import_products_from_csv(
+    csv_text: str,
+    actor_id: int,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    """
+    parses CSV data, validates lines, and inserts or updates products and their inventory balances.
+    records audit log entries.
+    """
+    reader = csv.DictReader(io.StringIO(csv_text.strip()))
+    rows = list(reader)
+    return await import_products_from_rows(rows, actor_id=actor_id, db=db)
+
+
+async def import_products_from_excel(
+    file_bytes: bytes,
+    actor_id: int,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    """
+    parses an Excel (.xlsx) workbook (single sheet or multi-sheet),
+    validates lines, and inserts or updates products and their inventory balances.
+    records audit log entries.
+    """
+    rows = extract_rows_from_workbook_bytes(file_bytes)
+    return await import_products_from_rows(rows, actor_id=actor_id, db=db)
