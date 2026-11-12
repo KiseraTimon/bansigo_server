@@ -27,6 +27,7 @@ class UserCreate(UserBase):
 
     phone: Phone
     username: Username | None = None
+    role: UserRole | None = None
     password: Password
     password_confirm: str
 
