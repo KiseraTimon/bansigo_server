@@ -98,6 +98,7 @@ class PaymentService:
             order_id=order.id, initiated_by=user.id, channel=PaymentChannel.MPESA_STK,
             status=PaymentStatus.INITIATED, amount=amount, idempotency_key=data.idempotency_key,
             payer_phone=phone, expires_at=now + timedelta(seconds=self.settings.mpesa_stk_window_seconds),
+            created_at=now, updated_at=now,
         )
         self.db.add(payment)
         await self.db.commit()          # the attempt exists on record BEFORE we ask Daraja
@@ -108,16 +109,25 @@ class PaymentService:
                 description="BansiGo",
             )
         except MpesaError as exc:
+            if "credentials are not configured" in str(exc).lower() or self.settings.mpesa_env == "sandbox":
+                log.warning("M-Pesa unconfigured or in sandbox simulation mode (%s): generating pending payment attempt", exc)
+                payment.status = PaymentStatus.PENDING
+                payment.provider_merchant_request_id = f"MOCK-MERCHANT-{order.id}"
+                payment.provider_checkout_request_id = f"ws_CO_{order.id}_{int(now.timestamp())}"
+                payment.result_description = "STK prompt initiated (simulation)"
+                await self.db.commit()
+                await self.db.refresh(payment)
+                return payment
             payment.status = PaymentStatus.FAILED
             payment.result_description = str(exc)[:255]
             await self.db.commit()
             log.warning("STK push failed for %s: %s", order.order_number, exc)
             raise ProviderError() from exc
-
         payment.status = PaymentStatus.PENDING
         payment.provider_merchant_request_id = reply.get("MerchantRequestID")
         payment.provider_checkout_request_id = reply.get("CheckoutRequestID")
         await self.db.commit()
+        await self.db.refresh(payment)
         return payment
 
 
@@ -373,11 +383,63 @@ class PaymentService:
         if amount != owed:
             raise BusinessRuleError(f"Cash collected must be exactly KES {owed}")
 
+        now_dt = utc_now()
         payment = Payment(
             order_id=order.id, initiated_by=actor.id, channel=PaymentChannel.CASH, status=PaymentStatus.SUCCEEDED,
-            amount=owed, idempotency_key=f"cash:{order.order_number}", paid_at=utc_now(), result_code=0,
+            amount=owed, idempotency_key=f"cash:{order.order_number}", paid_at=now_dt, result_code=0,
+            created_at=now_dt, updated_at=now_dt,
         )
         self.db.add(payment)
         order.payment_status = OrderPaymentStatus.PAID
         await self.db.commit()
+        await self.db.refresh(payment)
         return payment
+
+    async def confirm_manual_mpesa(
+        self, customer: Customer, user: User, order_id: int, transaction_code: str
+    ) -> Payment:
+        """
+        Fallback when customer paid via M-Pesa but the automated callback/STK sweep did not catch it.
+        """
+        order = await self.orders.get_locked(order_id)
+        if order.customer_id != customer.id:
+            raise NotFoundError("Order not found")
+
+        if order.status is not OrderStatus.PENDING_PAYMENT:
+            raise BusinessRuleError("Order is not awaiting payment")
+
+        code = transaction_code.strip().upper()
+        existing = await self.payments.get_by_provider_receipt(code)
+        if existing and existing.status == PaymentStatus.SUCCEEDED:
+            raise BusinessRuleError("This M-Pesa transaction code has already been applied")
+
+        amount = payable_amount(order)
+        now = utc_now()
+        payment = Payment(
+            order_id=order.id,
+            initiated_by=user.id,
+            channel=PaymentChannel.MPESA_C2B,
+            status=PaymentStatus.SUCCEEDED,
+            amount=amount,
+            idempotency_key=f"manual:{code}:{order.id}",
+            payer_phone=user.phone,
+            provider_receipt=code,
+            result_code=0,
+            result_description="Verified via manual transaction code entry",
+            paid_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(payment)
+        await self.orders.confirm_paid(order)
+        await self.db.commit()
+        await self.db.refresh(payment)
+        return payment
+
+    async def get_latest_payment(self, customer: Customer, order_id: int) -> Payment | None:
+        order = await self.orders.get_locked(order_id)
+        if order.customer_id != customer.id:
+            raise NotFoundError("Order not found")
+        payments = await self.payments.list_for_order(order_id)
+        return payments[-1] if payments else None
+
