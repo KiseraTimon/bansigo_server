@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # security configurations
     secret_key: SecretStr = Field(min_length=32)
-    access_tokens_expire_minutes: int = Field(30, gt=0)
+    access_tokens_expire_minutes: int = Field(10080, gt=0)  # 7 days for mobile app persistent session
     admin_portal_path: str = Field(
         default="console-hq",
         validation_alias=AliasChoices("admin_portal_path", "admin_secret_slug")
@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     rider_fee_share: Decimal = Field(Decimal("0.70"), ge=0, le=1)          # share of the delivery fee paid to the rider (DECISION NEEDED)
     handover_code_length: int = Field(4, ge=4, le=8)
     handover_max_attempts: int = Field(5, gt=0)
+
+    # OpenStreetMap road graph & supermarket dispatch configurations
+    road_network_graphml_path: Path = Path("migori_bansi_7km.graphml")
+    supermarket_latitude: Decimal = Decimal("-1.061219")
+    supermarket_longitude: Decimal = Decimal("34.474196")
+    supermarket_name: str = "Bansi Mega Supermarket"
+    delivery_max_radius_km: float = Field(7.0, gt=0)
+    delivery_base_fee: Decimal = Field(Decimal("50.00"), ge=0)
+    delivery_fee_per_km: Decimal = Field(Decimal("20.00"), ge=0)
 
 
     # M-Pesa (Daraja) configurations
