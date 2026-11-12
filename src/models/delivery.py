@@ -5,12 +5,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, false
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
 from .base import TimestampMixin, UTCDateTime, str_enum
-from .types import Money
+from .types import Coordinate, Money
 
 if TYPE_CHECKING:
     from .order import Order
@@ -66,6 +66,10 @@ class Delivery(Base, TimestampMixin):
     # reserved route algorithm fields
     estimated_distance_m: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     estimated_duration_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    routing_algorithm: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    route_waypoints: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pickup_latitude: Mapped[Optional[Decimal]] = mapped_column(Coordinate, nullable=True)
+    pickup_longitude: Mapped[Optional[Decimal]] = mapped_column(Coordinate, nullable=True)
 
     # relationships
     order: Mapped["Order"] = relationship(back_populates="delivery", lazy="raise")

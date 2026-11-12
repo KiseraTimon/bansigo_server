@@ -7,6 +7,7 @@ from typing import Type, Any
 from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Dialect, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
+from utilities.time_utils import utc_now
 
 
 class UTCDateTime(TypeDecorator):
@@ -73,13 +74,15 @@ class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         nullable=False,
+        default=utc_now,
         server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         nullable=False,
+        default=utc_now,
         server_default=func.now(),
-        onupdate=func.now()
+        onupdate=utc_now
     )
 
 class AuditMixin(TimestampMixin):
