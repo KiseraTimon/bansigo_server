@@ -43,6 +43,13 @@ class CashPaymentIn(BaseModel):
     amount: PositiveMoney
 
 
+class ManualPaymentIn(BaseModel):
+    """customer manually submitting an M-Pesa transaction code as a fallback"""
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_code: Annotated[str, StringConstraints(min_length=6, max_length=25, strip_whitespace=True, to_upper=True)]
+
+
 # Daraja STK callback (shape fixed by Safaricom; field names are theirs)
 
 class StkCallbackItem(BaseModel):
