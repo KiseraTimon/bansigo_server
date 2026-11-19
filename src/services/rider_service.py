@@ -44,24 +44,35 @@ class RiderService:
 
     async def apply(self, user: User, data: RiderApply) -> Rider:
         """
-        a RIDER-role user submits their documents. Starts PENDING; an admin vets it
+        a RIDER-role user submits or updates their documents. Starts/resets to PENDING for admin vetting.
         """
         if user.role is not UserRole.RIDER:
             raise ForbiddenError("Only rider accounts can apply")
-        if await self.riders.get_by_user_id(user.id) is not None:
-            raise ConflictError(["rider profile"])
 
         if data.licence_expiry is not None and data.licence_expiry <= date.today():
             raise AppError("Your driving licence has expired")
 
+        existing_rider = await self.riders.get_by_user_id(user.id)
+        exclude_id = existing_rider.id if existing_rider else None
+
         taken = await self.riders.conflicting_fields(
-            national_id_number=data.national_id_number, vehicle_plate=data.vehicle_plate
+            national_id_number=data.national_id_number,
+            vehicle_plate=data.vehicle_plate,
+            exclude_id=exclude_id
         )
         if taken:
             raise ConflictError(taken)
 
-        rider = Rider(user_id=user.id, **data.model_dump())
-        self.db.add(rider)
+        if existing_rider is not None:
+            # Update the existing rider record with business vetting details
+            for key, val in data.model_dump().items():
+                setattr(existing_rider, key, val)
+            existing_rider.approval_status = ApprovalStatus.PENDING
+            rider = existing_rider
+        else:
+            rider = Rider(user_id=user.id, **data.model_dump())
+            self.db.add(rider)
+
         try:
             await self.db.commit()
         except IntegrityError:

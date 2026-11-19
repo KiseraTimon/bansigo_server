@@ -20,11 +20,15 @@ class RiderApply(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     national_id_number: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{6,10}$")]
+    id_card_front_url: str | None = Field(default=None, max_length=255)
+    id_card_back_url: str | None = Field(default=None, max_length=255)
     vehicle_type: VehicleType = VehicleType.MOTORCYCLE
     vehicle_plate: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True, max_length=15)] | None = None
     vehicle_description: str | None = Field(default=None, max_length=100)
+    vehicle_proof_url: str | None = Field(default=None, max_length=255)
     licence_number: Annotated[str, StringConstraints(strip_whitespace=True, max_length=30)] | None = None
     licence_expiry: date | None = None
+    driving_licence_url: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _rules(self):
@@ -65,7 +69,13 @@ class RiderOut(ORMModel):
     vehicle_type: VehicleType
     vehicle_plate: str | None
     vehicle_description: str | None
+    vehicle_proof_url: str | None = None
+    national_id_number: str | None = None
+    id_card_front_url: str | None = None
+    id_card_back_url: str | None = None
+    licence_number: str | None = None
     licence_expiry: date | None
+    driving_licence_url: str | None = None
     rating_average: Decimal | None
     rating_count: int
     deliveries_completed: int

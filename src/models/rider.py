@@ -72,8 +72,11 @@ class Rider(Base, TimestampMixin):
 
     # identity documents.
     national_id_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, unique=True)
+    id_card_front_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    id_card_back_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     licence_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     licence_expiry: Mapped[Optional[date]] = mapped_column(Date, nullable=True)    # null for bicycles
+    driving_licence_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # vehicle
     vehicle_type: Mapped[VehicleType] = mapped_column(
@@ -81,6 +84,7 @@ class Rider(Base, TimestampMixin):
     )
     vehicle_plate: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, unique=True)
     vehicle_description: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_proof_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # availability + last known position
     # TODO: Migrate these to REDIS as they are constantly updated fields
