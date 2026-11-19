@@ -1,8 +1,10 @@
 # src/routers/rider/deliveries.py
 
+import os
+import uuid
 from decimal import Decimal
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from src.dependencies import (
     CurrentUser,
@@ -52,6 +54,48 @@ async def apply_for_rider(
 ) -> RiderOut:
     rider = await service.apply(user, data)
     return RiderOut.model_validate(rider)
+
+
+@router.post(
+    "/documents/upload",
+    summary="Upload rider vetting document or profile picture",
+)
+async def upload_rider_document(
+    user: CurrentUser,
+    doc_type: str = Query(..., description="Type: id_front, id_back, licence, vehicle_proof, or avatar"),
+    file: UploadFile = File(...)
+):
+    valid_types = {"id_front", "id_back", "licence", "vehicle_proof", "avatar"}
+    if doc_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid doc_type. Must be one of: {', '.join(valid_types)}"
+        )
+
+    # Validate file extension
+    original_name = file.filename or "upload.jpg"
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".pdf"]:
+        ext = ".jpg"
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size exceeds 10MB limit")
+
+    # Target save folder
+    from src import MEDIA_DIR
+    target_dir = os.path.join(MEDIA_DIR, "rider_documents")
+    os.makedirs(target_dir, exist_ok=True)
+
+    filename = f"rider_{user.id}_{doc_type}_{uuid.uuid4().hex[:8]}{ext}"
+    filepath = os.path.join(target_dir, filename)
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    file_url = f"/media/rider_documents/{filename}"
+    log.info("Rider %s uploaded document %s -> %s", user.id, doc_type, file_url)
+    return {"url": file_url, "doc_type": doc_type, "filename": filename}
 
 
 @router.get(
