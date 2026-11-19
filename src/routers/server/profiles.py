@@ -17,7 +17,9 @@ from src.repositories import UserRepository
 from src.schemas import AccountDelete, CodeConfirm, PasswordChange, UserPrivate, UserPublic, UserUpdate
 from src.services import AuthService, UserService, VerificationService
 
-from utilities import Mailer
+from utilities import Mailer, get_logger
+
+log = get_logger(__name__)
 
 
 # router object
@@ -112,6 +114,8 @@ async def request_email_verification(
     """
 
     mail = await verification.start_email_verification(user)
+    # Always log verification code to server console for seamless local debugging and real-world testing
+    log.info("RIDER/USER EMAIL VERIFICATION INITIATED for user=%s email=%s: \n%s", user.id, user.email, mail.body)
     background.add_task(mailer.send, mail)
     return {"detail": "Verification code sent"}
 
