@@ -104,6 +104,16 @@ class MpesaClient:
             raise MpesaError(data.get("errorMessage", "Daraja rejected the request"), code=data.get("errorCode"))
         return data
 
+    def _resolve_callback_url(self) -> str:
+        raw = (self.s.mpesa_callback_url or "").strip().rstrip("/")
+        if not raw:
+            return raw
+        if "/stk-callback" in raw:
+            return raw
+        secret = self.s.mpesa_callback_secret.get_secret_value() if self.s.mpesa_callback_secret else ""
+        suffix = f"/api/payments/mpesa/stk-callback/{secret}" if secret else "/api/payments/mpesa/stk-callback"
+        return f"{raw}{suffix}"
+
     # public API
     async def stk_push(
         self, *, phone: str, amount: Decimal, account_reference: str, description: str
@@ -129,7 +139,7 @@ class MpesaClient:
             "PartyA": phone,
             "PartyB": self.s.mpesa_party_b or self.s.mpesa_shortcode,
             "PhoneNumber": phone,
-            "CallBackURL": self.s.mpesa_callback_url,
+            "CallBackURL": self._resolve_callback_url(),
             "AccountReference": account_reference[:12],
             "TransactionDesc": description[:13],
         })

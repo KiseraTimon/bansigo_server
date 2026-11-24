@@ -85,9 +85,15 @@ class PaymentService:
             raise BusinessRuleError("This order is not awaiting an M-Pesa payment")
 
         now = utc_now()
-        if any(p.status in (PaymentStatus.INITIATED, PaymentStatus.PENDING) and p.expires_at and p.expires_at > now
-               for p in order.payments):
-            raise BusinessRuleError("A payment prompt is already open on your phone. Complete it or wait for it to expire")
+        for prev in order.payments:
+            if prev.status in (PaymentStatus.INITIATED, PaymentStatus.PENDING) and prev.expires_at and prev.expires_at > now:
+                age_s = (now - prev.created_at).total_seconds() if prev.created_at else 999
+                if age_s < 15:
+                    raise BusinessRuleError(
+                        "A payment prompt was just sent to your phone. Please wait 15 seconds before resending"
+                    )
+                prev.status = PaymentStatus.CANCELLED
+                prev.result_description = "Superseded by customer resend request"
 
         amount = payable_amount(order)
         if amount != amount.to_integral_value():
@@ -126,6 +132,15 @@ class PaymentService:
         payment.status = PaymentStatus.PENDING
         payment.provider_merchant_request_id = reply.get("MerchantRequestID")
         payment.provider_checkout_request_id = reply.get("CheckoutRequestID")
+        payment.result_description = str(reply.get("CustomerMessage") or "STK prompt sent")[:255]
+        log.info(
+            "Daraja STK push accepted for %s (phone=%s, amount=%s, checkout_id=%s, msg=%s)",
+            order.order_number,
+            phone,
+            amount,
+            payment.provider_checkout_request_id,
+            reply.get("CustomerMessage"),
+        )
         await self.db.commit()
         await self.db.refresh(payment)
         return payment
@@ -135,6 +150,14 @@ class PaymentService:
     def is_safaricom_address(self, ip: str | None) -> bool:
         allow = self.settings.mpesa_callback_ips
         return not allow or (ip is not None and ip in allow)     # an empty allowlist = sandbox/dev
+
+    async def _trigger_auto_dispatch(self, order_id: int) -> None:
+        """Runs routing-engine auto-dispatch for a newly paid delivery order (best-effort)."""
+        try:
+            from .delivery_service import DeliveryService
+            await DeliveryService(self.db, self.settings).auto_dispatch_for_order(order_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Auto-dispatch after payment failed for order %s: %s", order_id, exc)
 
     async def handle_stk_callback(self, envelope: StkCallbackEnvelope, raw: dict, source_ip: str | None) -> None:
         """
@@ -151,8 +174,9 @@ class PaymentService:
         if not is_new and event.processed_at is not None:
             return                                  # a replay of something already handled
 
+        paid_order_id: int | None = None
         try:
-            await self._apply_stk_result(event_id, cb)
+            paid_order_id = await self._apply_stk_result(event_id, cb)
             await self.db.commit()
         except Exception as exc:                    # noqa: BLE001 - must not bubble to Daraja
             await self.db.rollback()
@@ -161,28 +185,32 @@ class PaymentService:
             stored.processing_error = f"{type(exc).__name__}: {exc}"[:500]
             await self.db.commit()
 
+        if paid_order_id is not None:
+            await self._trigger_auto_dispatch(paid_order_id)
 
-    async def _apply_stk_result(self, event_id: int, cb) -> None:
+
+    async def _apply_stk_result(self, event_id: int, cb) -> int | None:
         event = await self.events.get_by_id(event_id)
         now = utc_now()
 
         payment = await self.payments.get_by_checkout_id(cb.CheckoutRequestID, for_update=True)
         if payment is None:
             event.processing_error = "no payment matches this CheckoutRequestID"
-            return                                  # left unprocessed on purpose: a human must look
+            return None                             # left unprocessed on purpose: a human must look
         event.payment_id = payment.id
 
         if not event.is_authentic:
             event.processing_error = "callback did not come from a Safaricom address; not applied"
-            return
+            return None
 
         if payment.status is PaymentStatus.SUCCEEDED:
             event.processed_at = now                # already settled; nothing to do
-            return
+            return None
 
         payment.result_code = cb.ResultCode
         payment.result_description = cb.ResultDesc[:255]
 
+        paid_order_id: int | None = None
         if cb.ResultCode == 0:
             meta = cb.metadata()
             settled = await self._settle(
@@ -191,12 +219,14 @@ class PaymentService:
                 phone=str(meta["PhoneNumber"]) if meta.get("PhoneNumber") else None,
             )
             if not settled:
-                return                              # mismatch flagged on the event; stays for a human
+                return None                         # mismatch flagged on the event; stays for a human
+            paid_order_id = payment.order_id
         else:
             # a late success can still arrive after this (the settle path accepts any non-SUCCEEDED state)
             payment.status = _RESULT_STATUS.get(cb.ResultCode, PaymentStatus.FAILED)
 
         event.processed_at = now
+        return paid_order_id
 
 
     async def _settle(
@@ -276,6 +306,7 @@ class PaymentService:
             code = int(reply.get("ResultCode", -1))
             payment.result_code = code
             payment.result_description = str(reply.get("ResultDesc", ""))[:255]
+            confirmed_order_id: int | None = None
             if code == 0:
                 payment.status = PaymentStatus.SUCCEEDED
                 payment.paid_at = now
@@ -285,10 +316,13 @@ class PaymentService:
                     await self.refunds.request_for_order(order, actor_id=None, reason="Payment received after cancellation")
                 else:
                     await self.orders.confirm_paid(order)
+                    confirmed_order_id = order.id
             else:
                 payment.status = _RESULT_STATUS.get(code, PaymentStatus.FAILED)
 
             await self.db.commit()
+            if confirmed_order_id is not None:
+                await self._trigger_auto_dispatch(confirmed_order_id)
             resolved += 1
         return resolved
 
@@ -346,11 +380,13 @@ class PaymentService:
             event.payment_id = payment.id
 
             locked = await self.orders.get_locked(order.id)
+            confirmed_order_id: int | None = None
             if locked.status is OrderStatus.CANCELLED:
                 locked.payment_status = OrderPaymentStatus.PAID
                 await self.refunds.request_for_order(locked, actor_id=None, reason="Payment received after cancellation")
             elif locked.status is OrderStatus.PENDING_PAYMENT and notif.TransAmount == locked.total:
                 await self.orders.confirm_paid(locked)
+                confirmed_order_id = locked.id
             else:
                 event.processing_error = "paid amount/state does not match the order; match manually"
                 await self.db.commit()
@@ -358,6 +394,8 @@ class PaymentService:
 
             event.processed_at = utc_now()
             await self.db.commit()
+            if confirmed_order_id is not None:
+                await self._trigger_auto_dispatch(confirmed_order_id)
         except Exception as exc:                    # noqa: BLE001
             await self.db.rollback()
             log.exception("could not apply C2B confirmation %s", notif.TransID)
@@ -434,12 +472,38 @@ class PaymentService:
         await self.orders.confirm_paid(order)
         await self.db.commit()
         await self.db.refresh(payment)
+        await self._trigger_auto_dispatch(order.id)
         return payment
 
-    async def get_latest_payment(self, customer: Customer, order_id: int) -> Payment | None:
+    async def get_latest_payment(self, customer: Customer, order_id: int, *, query_daraja: bool = False) -> Payment | None:
         order = await self.orders.get_locked(order_id)
         if order.customer_id != customer.id:
             raise NotFoundError("Order not found")
         payments = await self.payments.list_for_order(order_id)
-        return payments[-1] if payments else None
+        latest = payments[-1] if payments else None
+        if (
+            query_daraja
+            and latest is not None
+            and latest.status is PaymentStatus.PENDING
+            and self.mpesa is not None
+            and latest.provider_checkout_request_id
+            and not latest.provider_checkout_request_id.startswith("MOCK-")
+        ):
+            try:
+                reply = await self.mpesa.stk_query(latest.provider_checkout_request_id)
+                code = int(reply.get("ResultCode", -1))
+                latest.result_code = code
+                latest.result_description = str(reply.get("ResultDesc", ""))[:255]
+                if code == 0:
+                    latest.status = PaymentStatus.SUCCEEDED
+                    latest.paid_at = utc_now()
+                    await self.orders.confirm_paid(order)
+                    await self.db.commit()
+                    await self._trigger_auto_dispatch(order.id)
+                else:
+                    latest.status = _RESULT_STATUS.get(code, PaymentStatus.FAILED)
+                    await self.db.commit()
+            except MpesaError as exc:
+                log.warning("Daraja STK query error for %s (%s): %s", latest.provider_checkout_request_id, exc.code, exc)
+        return latest
 
