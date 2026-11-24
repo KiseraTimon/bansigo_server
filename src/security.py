@@ -114,3 +114,17 @@ def make_handover_code(secret: str, delivery_id: int, length: int = 4) -> str:
     """
     digest = hmac.new(secret.encode(), f"handover:{delivery_id}".encode(), hashlib.sha256).digest()
     return f"{int.from_bytes(digest[:8], 'big') % (10 ** length):0{length}d}"
+
+
+def make_pickup_code(secret: str, delivery_id: int, length: int = 4) -> str:
+    """
+    Separate short code sent to an accepting rider as a notification for store pickup verification.
+    Uses a distinct domain prefix ('pickup:') so it never collides with the customer handover code.
+    """
+    digest = hmac.new(secret.encode(), f"pickup:{delivery_id}".encode(), hashlib.sha256).digest()
+    code = f"{int.from_bytes(digest[:8], 'big') % (10 ** length):0{length}d}"
+    # Guard against accidental numeric match with handover code
+    if code == make_handover_code(secret, delivery_id, length):
+        alt = (int(code) + 1) % (10 ** length)
+        code = f"{alt:0{length}d}"
+    return code
