@@ -34,11 +34,12 @@ from src.repositories import (
     DeliveryRepository, OrderRepository, ProductRepository, RiderRepository, StaffRepository, AddressRepository, DeliveryZoneRepository,
 )
 from src.schemas import CheckoutRequest, PickItemIn
-from src.security import make_handover_code
+from src.security import make_handover_code, make_pickup_code
 from utilities import ZERO, get_logger, money, utc_now, vat_contained, whole_shillings
 
 from .audit_service import AuditService
 from .inventory_service import InventoryService
+from .notification_service import NotificationService
 from .refund_service import RefundService
 
 log = get_logger(__name__)
@@ -77,6 +78,7 @@ class OrderService:
         self.riders = RiderRepository(db)
         self.staff = StaffRepository(db)
         self.inventory = InventoryService(db)
+        self.notifications = NotificationService(db)
         self.refunds = RefundService(db)
         self.audit = AuditService(db)
 
@@ -149,6 +151,18 @@ class OrderService:
                 else:
                     raise BusinessRuleError("We do not deliver to this address yet")
             delivery_fee = address.zone.delivery_fee
+            if address.latitude is not None and address.longitude is not None:
+                try:
+                    from src.algorithms.route_engines import get_router
+                    router = get_router()
+                    lat_f = float(address.latitude)
+                    lon_f = float(address.longitude)
+                    within, _ = router.is_within_coverage(lat_f, lon_f)
+                    if within:
+                        route = router.route_from_supermarket(lat_f, lon_f)
+                        delivery_fee = router.calculate_delivery_fee(route.total_distance_m)
+                except Exception as exc:
+                    log.warning("Dynamic delivery fee calculation fell back to zone fee: %s", exc)
 
         # lines: priced HERE, from the catalogue
         products = {p.id: p for p in await self.products.get_many(line.product_id for line in data.items)}
@@ -308,21 +322,54 @@ class OrderService:
         return await self.orders.get_full(order_id)
 
 
-    async def confirm_paid(self, order: Order, *, actor_id: int | None = None) -> None:
+    async def confirm_paid(self, order: Order, *, actor_id: int | None = None) -> Delivery | None:
         """
         a payment succeeded: PENDING_PAYMENT -> CONFIRMED and open the delivery job.
         Called by PaymentService inside its transaction (stages only)
         """
         order.payment_status = OrderPaymentStatus.PAID
+        delivery = None
         if order.status is OrderStatus.PENDING_PAYMENT:
             await self._move(order, OrderStatus.CONFIRMED, actor_id=actor_id, note="payment received")
-            await self._open_delivery(order)
+            delivery = await self._open_delivery(order)
+            customer_row = await self.db.get(Customer, order.customer_id)
+            if customer_row is not None:
+                self.notifications.stage(
+                    user_id=customer_row.user_id,
+                    title=f"Order #{order.order_number} Confirmed",
+                    message="Payment received! Assigning a rider from Bansi Mega Supermarket.",
+                    notif_type="order",
+                    action_type="order_tracking",
+                    action_payload=str(order.id),
+                )
+        return delivery
 
+    async def prepare_for_pickup(self, order: Order, *, actor_id: int) -> None:
+        """
+        Ensures an order in CONFIRMED/PREPARING transitions cleanly to READY when verified via store pickup code,
+        consuming any remaining reserved stock on unpicked lines.
+        """
+        if order.status is OrderStatus.READY:
+            return
+        if order.status is OrderStatus.CONFIRMED:
+            await self._move(order, OrderStatus.PREPARING, actor_id=actor_id, note="dispatch bay pickup preparation")
+        if order.status is OrderStatus.PREPARING:
+            for item in order.items:
+                if item.pick_status is PickStatus.PENDING:
+                    await self.inventory.consume_reserved(
+                        item.product_id, item.quantity, item.quantity, order_number=order.order_number, actor_id=actor_id
+                    )
+                    item.pick_status = PickStatus.PICKED
+                    item.quantity_picked = item.quantity
+                    item.final_line_total = money(item.unit_price * item.quantity)
+            goods = sum((i.final_line_total or ZERO for i in order.items), ZERO)
+            order.adjusted_total = min(whole_shillings(goods + order.delivery_fee - order.discount_total), order.total)
+            await self._move(order, OrderStatus.READY, actor_id=actor_id, note="verified packed for pickup")
 
-    async def _open_delivery(self, order: Order) -> None:
+    async def _open_delivery(self, order: Order) -> Delivery | None:
         """creates the (unassigned) delivery job for a confirmed delivery order"""
         if order.fulfilment_type is not FulfilmentType.DELIVERY:
-            return
+            return None
 
         delivery = Delivery(
             order_id=order.id,
@@ -351,10 +398,12 @@ class OrderService:
         self.db.add(delivery)
         await self.db.flush()
 
-        code = make_handover_code(
-            self.settings.secret_key.get_secret_value(), delivery.id, self.settings.handover_code_length
-        )
+        secret = self.settings.secret_key.get_secret_value()
+        code = make_handover_code(secret, delivery.id, self.settings.handover_code_length)
         delivery.handover_code_hash = hashlib.sha256(code.encode()).hexdigest()
+        pickup_code = make_pickup_code(secret, delivery.id, self.settings.pickup_code_length)
+        delivery.pickup_code_hash = hashlib.sha256(pickup_code.encode()).hexdigest()
+        return delivery
 
 
     # cancellation
@@ -402,11 +451,14 @@ class OrderService:
         if delivery is not None and delivery.status not in (
             DeliveryStatus.DELIVERED, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED
         ):
-            if delivery.rider_id is not None:
-                rider = await self.riders.get_for_update(delivery.rider_id)
-                if rider is not None and rider.status is RiderStatus.BUSY:
-                    rider.status = RiderStatus.AVAILABLE
+            prev_rider_id = delivery.rider_id
             delivery.status = DeliveryStatus.CANCELLED
+            await self.db.flush()
+            if prev_rider_id is not None:
+                remaining = await self.deliveries.count_active_for_rider(prev_rider_id)
+                rider = await self.riders.get_for_update(prev_rider_id)
+                if rider is not None and rider.status is RiderStatus.BUSY and remaining == 0:
+                    rider.status = RiderStatus.AVAILABLE
 
         order.cancelled_by = actor_id
         order.cancel_reason = reason[:255]
