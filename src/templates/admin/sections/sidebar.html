@@ -30,6 +30,13 @@
                 <span class="badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">{{ summary.pending_riders }} Vetting</span>
             {% endif %}
         </a>
+        <a class="admin-nav-item" data-tab="dispatch">
+            <i class="ri-route-line"></i>
+            <span>Dispatch &amp; Deliveries</span>
+            {% if summary and (summary.manual_dispatch_count > 0 or summary.overdue_delivery_count > 0) %}
+                <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">{{ summary.manual_dispatch_count + summary.overdue_delivery_count }} Alert</span>
+            {% endif %}
+        </a>
 
         <div class="nav-section-title">Operations & Quality</div>
         <a class="admin-nav-item" data-tab="reviews">
