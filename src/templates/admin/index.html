@@ -7,7 +7,7 @@
 
 <!--Custom CSS-->
 {% block css %}
-<link rel="stylesheet" href="{{ url_for('static', path='css/admin.css') }}?v=1.0">
+<link rel="stylesheet" href="{{ url_for('static', path='css/admin.css') }}?v=1.1">
 {% endblock %}
 
 <!--Exclude Storefront Header, Cart Drawer & Footer from Admin Console-->
@@ -42,6 +42,9 @@
                 <!-- System Actors (Staff, Riders, Admins, Customers) Section -->
                 {% include "admin/sections/actors.html" %}
 
+                <!-- Dispatch & Delivery Operations Section -->
+                {% include "admin/sections/dispatch.html" %}
+
                 <!-- Reviews & Feedback Section -->
                 {% include "admin/sections/reviews.html" %}
 
@@ -62,6 +65,7 @@
     {% include "admin/sections/bulk_modal.html" %}
     {% include "admin/sections/confirmation_modal.html" %}
     {% include "admin/sections/two_factor_modal.html" %}
+    {% include "admin/sections/rider_vetting_modal.html" %}
 {% endblock %}
 
 <!--Custom JS-->
@@ -70,5 +74,5 @@
     window.ADMIN_BASE_URL = {{ base_url | tojson }};
     window.IS_SUPERADMIN = {{ is_superadmin | tojson }};
 </script>
-<script src="{{ url_for('static', path='js/admin.js') }}?v=1.0"></script>
+<script src="{{ url_for('static', path='js/admin.js') }}?v=1.2"></script>
 {% endblock %}
