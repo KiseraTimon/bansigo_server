@@ -3,9 +3,9 @@
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, status
 
-from src.dependencies import CurrentCustomer, get_order_service, get_payment_service
+from src.dependencies import CurrentCustomer, get_delivery_service, get_order_service, get_payment_service
 from src.exceptions import ForbiddenError
-from src.models import OrderStatus
+from src.models import OrderStatus, PaymentMethod
 from src.schemas import (
     CancelRequest,
     CheckoutRequest,
@@ -16,7 +16,7 @@ from src.schemas import (
     PaymentOut,
     StkPushRequest,
 )
-from src.services import OrderService, PaymentService
+from src.services import DeliveryService, OrderService, PaymentService
 from utilities import get_logger
 
 log = get_logger(__name__)
@@ -24,6 +24,7 @@ log = get_logger(__name__)
 router = APIRouter(tags=["customer-orders"])
 OrderServiceDep = Annotated[OrderService, Depends(get_order_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
+DeliveryServiceDep = Annotated[DeliveryService, Depends(get_delivery_service)]
 
 ONGOING_STATUSES = [
     OrderStatus.PENDING_PAYMENT,
@@ -99,6 +100,7 @@ async def checkout(
     data: CheckoutRequest,
     customer: CurrentCustomer,
     service: OrderServiceDep,
+    deliveries: DeliveryServiceDep,
 ) -> OrderDetail:
     """
     Validates inventory, locks prices, and creates a new customer order.
@@ -106,6 +108,9 @@ async def checkout(
     if not customer.user.is_verified:
         raise ForbiddenError("Email verification is required before placing an order. Please verify your email address.")
     order = await service.checkout(customer=customer, user=customer.user, data=data)
+    if order.payment_method is PaymentMethod.CASH and order.status is OrderStatus.CONFIRMED:
+        await deliveries.auto_dispatch_for_order(order.id)
+        order = await service.get_for_customer(customer=customer, order_id=order.id)
     return OrderDetail.model_validate(order)
 
 
@@ -185,6 +190,22 @@ async def get_payment_status(
     order_id: int,
     customer: CurrentCustomer,
     payments: PaymentServiceDep,
+    query_daraja: bool = Query(True),
 ) -> PaymentOut | None:
-    payment = await payments.get_latest_payment(customer=customer, order_id=order_id)
+    payment = await payments.get_latest_payment(customer=customer, order_id=order_id, query_daraja=query_daraja)
+    return PaymentOut.model_validate(payment) if payment else None
+
+
+@router.post(
+    "/orders/{order_id}/pay/mpesa/query",
+    response_model=PaymentOut | None,
+    status_code=status.HTTP_200_OK,
+    summary="Actively query Daraja STK status for order",
+)
+async def query_mpesa_payment_status(
+    order_id: int,
+    customer: CurrentCustomer,
+    payments: PaymentServiceDep,
+) -> PaymentOut | None:
+    payment = await payments.get_latest_payment(customer=customer, order_id=order_id, query_daraja=True)
     return PaymentOut.model_validate(payment) if payment else None
