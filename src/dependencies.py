@@ -17,14 +17,14 @@ from src.models import Admin, AdminLevel, Customer, Rider, User, UserRole
 from src.repositories import AdminRepository, CustomerRepository, RiderRepository, UserRepository
 from src.security import decode_access_token
 from src.services import (
-    AddressService, AdminService, AuthService, CatalogueService, DeliveryService, InventoryService, OrderService,
-    PaymentService, RefundService, RiderService, UserService, VerificationService,
+    AddressService, AdminService, AuthService, CatalogueService, DeliveryService, InventoryService,
+    NotificationService, OrderService, PaymentService, RefundService, RiderService, UserService, VerificationService,
 )
 
 from utilities import Mailer, MpesaClient
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -82,6 +82,10 @@ def get_admin_service(settings: SettingsDep, db: DbSession) -> AdminService:
     return AdminService(db, settings)
 
 
+def get_notification_service(db: DbSession) -> NotificationService:
+    return NotificationService(db)
+
+
 def get_road_router():
     from src.algorithms.route_engines import get_router
     return get_router()
@@ -104,7 +108,8 @@ def get_payment_service(
 
 # authentication
 async def get_current_user(
-        token: Annotated[str, Depends(oauth2_scheme)],
+        request: Request,
+        token: Annotated[str | None, Depends(oauth2_scheme)],
         settings: SettingsDep,
         db: DbSession
 ) -> User:
@@ -116,8 +121,12 @@ async def get_current_user(
     :return:
     """
 
+    resolved_token = token or request.cookies.get("access_token")
+    if not resolved_token:
+        raise UnauthorizedError()
+
     try:
-        payload = decode_access_token(token, settings.secret_key.get_secret_value())
+        payload = decode_access_token(resolved_token, settings.secret_key.get_secret_value())
         user_id = int(payload["sub"])
 
     except (jwt.PyJWTError, KeyError, ValueError):
@@ -131,6 +140,29 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_optional_user(
+    request: Request,
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+    settings: SettingsDep,
+    db: DbSession,
+) -> User | None:
+    resolved_token = token or request.cookies.get("access_token")
+    if not resolved_token:
+        return None
+    try:
+        payload = decode_access_token(resolved_token, settings.secret_key.get_secret_value())
+        user_id = int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        return None
+    user = await UserRepository(db).get_by_id(user_id)
+    if user is None or not user.is_active or user.deleted_at is not None:
+        return None
+    return user
+
+
+OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
 def require_roles(*roles: UserRole):
