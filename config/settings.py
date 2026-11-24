@@ -98,6 +98,20 @@ class Settings(BaseSettings):
     rider_fee_share: Decimal = Field(Decimal("0.70"), ge=0, le=1)          # share of the delivery fee paid to the rider (DECISION NEEDED)
     handover_code_length: int = Field(4, ge=4, le=8)
     handover_max_attempts: int = Field(5, gt=0)
+    pickup_code_length: int = Field(4, ge=4, le=8)
+    pickup_max_attempts: int = Field(5, gt=0)
+
+    # Dispatch, multi-order batching, SLA timers & rider rejection penalties
+    rider_max_active_deliveries: int = Field(3, ge=1, le=10)
+    rider_batch_max_detour_km: float = Field(3.0, gt=0)
+    delivery_offer_timeout_seconds: int = Field(120, ge=30)
+    delivery_pickup_sla_minutes: int = Field(15, ge=5)
+    delivery_fulfilment_sla_minutes: int = Field(45, ge=10)
+    delivery_overdue_escalation_minutes: int = Field(20, ge=5)
+    delivery_sweeper_interval_seconds: int = Field(20, ge=5)
+    rider_rejection_penalty_threshold: int = Field(3, ge=1)
+    rider_rejection_cooldown_minutes: int = Field(15, ge=1)
+    rider_suspension_penalty_points: int = Field(50, ge=10)
 
     # OpenStreetMap road graph & supermarket dispatch configurations
     road_network_graphml_path: Path = Path("migori_bansi_7km.graphml")
