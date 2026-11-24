@@ -80,6 +80,11 @@ class RiderOut(ORMModel):
     rating_count: int
     deliveries_completed: int
     last_seen_at: datetime | None
+    unjustified_rejections_count: int = 0
+    total_rejections_count: int = 0
+    overdue_deliveries_count: int = 0
+    penalty_points: int = 0
+    dispatch_cooldown_until: datetime | None = None
 
 
 class RiderAdminOut(RiderOut):
@@ -111,6 +116,15 @@ class DeliveryRespond(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     accept: bool
+    reason_code: str | None = Field(default=None, max_length=50)
+    reason_text: str | None = Field(default=None, max_length=255)
+
+
+class DeliveryPickup(BaseModel):
+    """store pickup verification using the pickup code sent to the rider"""
+    model_config = ConfigDict(extra="forbid")
+
+    pickup_code: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4,8}$")]
 
 
 class DeliveryComplete(BaseModel):
@@ -147,6 +161,13 @@ class DeliveryOut(ORMModel):
     routing_algorithm: str | None = None
     pickup_latitude: Decimal | None = None
     pickup_longitude: Decimal | None = None
+    offer_expires_at: datetime | None = None
+    pickup_due_at: datetime | None = None
+    delivery_due_at: datetime | None = None
+    is_overdue: bool = False
+    needs_manual_assignment: bool = False
+    manual_assignment_reason: str | None = None
+    rejection_count: int = 0
 
 
 class HandoverCodeOut(BaseModel):
@@ -189,13 +210,18 @@ class CoverageCheckResponse(BaseModel):
 class DeliveryTrackingOut(BaseModel):
     order_id: int
     order_number: str
+    order_status: str | None = None
     delivery_id: int | None
     status: str
     is_delivered: bool
+    is_overdue: bool = False
     routing_algorithm: str | None = None
     estimated_distance_m: int | None = None
     estimated_duration_s: int | None = None
     estimated_minutes: int | None = None
+    offer_expires_at: datetime | None = None
+    pickup_due_at: datetime | None = None
+    delivery_due_at: datetime | None = None
     supermarket_location: dict[str, Any]
     delivery_location: dict[str, Any]
     rider: RiderPublic | None = None
@@ -220,6 +246,11 @@ class RiderDeliveryDetailOut(BaseModel):
     estimated_duration_s: int | None = None
     routing_algorithm: str | None = None
     route_waypoints: list[list[float]] = []
+    offer_expires_at: datetime | None = None
+    pickup_due_at: datetime | None = None
+    delivery_due_at: datetime | None = None
+    is_overdue: bool = False
+    items_summary: list[str] = []
 
 
 class RiderNavigationOut(BaseModel):
@@ -232,3 +263,45 @@ class RiderNavigationOut(BaseModel):
     routing_algorithm: str
     steps: list[dict[str, Any]]
     waypoints: list[list[float]]
+
+
+class RiderWalletTransactionOut(BaseModel):
+    id: str
+    order_number: str
+    amount: Decimal
+    type: str  # DELIVERY_EARNING, PAYOUT_WITHDRAWAL
+    description: str
+    timestamp: str
+    distance_km: float | None = None
+    status: str
+    reference_code: str
+
+
+class RiderWalletOut(BaseModel):
+    total_earnings: Decimal
+    available_balance: Decimal
+    cod_cash_in_hand: Decimal
+    today_earnings: Decimal
+    weekly_earnings: Decimal
+    completed_trips_count: int
+    pending_payouts: Decimal
+    average_trip_fee: Decimal
+    total_distance_km: float
+    transactions: list[RiderWalletTransactionOut] = []
+
+
+class RiderWithdrawRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: PositiveMoney
+    phone: Annotated[str, StringConstraints(strip_whitespace=True, min_length=9, max_length=20)]
+
+
+class RiderWithdrawOut(BaseModel):
+    id: int
+    amount: Decimal
+    phone: str
+    reference_code: str
+    status: str
+    timestamp: str
+    available_balance: Decimal
