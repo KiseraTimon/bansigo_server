@@ -214,8 +214,8 @@ class AuthService:
         if user.role is UserRole.CUSTOMER:
             user.customer = Customer()
         elif user.role is UserRole.RIDER:
-            from src.models.rider import Rider
-            user.rider = Rider()
+            from src.models.rider import ApprovalStatus, Rider
+            user.rider = Rider(approval_status=ApprovalStatus.NEW)
 
 
     async def _generate_username(self, first_name: str, last_name: str) -> str:
