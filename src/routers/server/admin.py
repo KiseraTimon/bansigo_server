@@ -22,7 +22,7 @@ from config import Settings, get_settings
 from src.database import get_db
 from src.dependencies import (
     CurrentAdmin, DbSession, SettingsDep, get_admin_service, get_auth_service,
-    get_catalogue_service, get_current_admin, require_admin_level,
+    get_catalogue_service, get_current_admin, get_delivery_service, require_admin_level,
 )
 from src.exceptions import AppError, ForbiddenError, InvalidCredentialsError, NotFoundError, UnauthorizedError
 from src.helpers import (
@@ -33,7 +33,7 @@ from src.models import (
 )
 from src.repositories import AdminRepository, ProductRepository, UserRepository
 from src.schemas import ProductCreate, ProductUpdate
-from src.services import AdminService, AuthService, AuditService, CatalogueService
+from src.services import AdminService, AuthService, AuditService, CatalogueService, DeliveryService
 from utilities import get_logger
 
 log = get_logger(__name__)
@@ -104,6 +104,7 @@ async def admin_dashboard_view(
     reviews = await admin_service.get_reviews_summary()
     audits = await admin_service.get_audit_trail(limit=30)
     catalogue_options = await admin_service.get_catalogue_form_options()
+    dispatch_data = await admin_service.get_dispatch_queue_data()
 
     admin_level_str = admin.level.value if hasattr(admin.level, "value") else str(admin.level)
     is_superadmin = (admin.level == AdminLevel.SUPER)
@@ -118,6 +119,7 @@ async def admin_dashboard_view(
             "is_superadmin": is_superadmin,
             "base_url": base_url,
             "summary": summary,
+            "dispatch_data": dispatch_data,
             "products": products_list,
             "categories": catalogue_options.get("categories", []),
             "brands": catalogue_options.get("brands", []),
@@ -575,6 +577,15 @@ async def bulk_upload_products_csv(
 # ---------------------------------------------------------------------------
 # SYSTEM ACTORS REGULATION (Staff, Riders, Admins)
 # ---------------------------------------------------------------------------
+@router.get("/actors/riders/{rider_id}")
+async def get_rider_submission_detail(
+    rider_id: int,
+    admin_ctx: CurrentAdmin,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+):
+    return await admin_service.get_rider_detail(rider_id)
+
+
 @router.post("/actors/riders/{rider_id}/vet")
 async def vet_rider(
     rider_id: int,
@@ -886,3 +897,48 @@ async def change_admin_personal_password(
         new_password_confirm=new_password_confirm,
     )
     return {"detail": "Password updated successfully"}
+
+
+# ---------------------------------------------------------------------------
+# STORE OPERATOR DISPATCH & MANUAL RIDER ASSIGNMENT
+# ---------------------------------------------------------------------------
+@router.post("/deliveries/{delivery_id}/auto-dispatch")
+async def admin_auto_dispatch_delivery(
+    delivery_id: int,
+    admin_ctx: CurrentAdmin,
+    delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
+):
+    user, _ = admin_ctx
+    result = await delivery_service.try_auto_dispatch(delivery_id, dispatcher=user)
+    if result is None:
+        return {"detail": "No eligible rider available; flagged for manual assignment", "assigned": False}
+    delivery, rider = result
+    return {
+        "detail": f"Delivery #{delivery.id} auto-assigned to Rider #{rider.id}",
+        "assigned": True,
+        "rider_id": rider.id,
+    }
+
+
+@router.post("/deliveries/{delivery_id}/assign")
+async def admin_manual_assign_delivery(
+    delivery_id: int,
+    admin_ctx: CurrentAdmin,
+    delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
+    rider_id: int = Form(...),
+):
+    user, _ = admin_ctx
+    delivery = await delivery_service.assign(delivery_id, rider_id, user)
+    return {
+        "detail": f"Delivery #{delivery.id} manually assigned to Rider #{rider_id}",
+        "rider_id": delivery.rider_id,
+    }
+
+
+@router.post("/deliveries/sweep")
+async def admin_sweep_delivery_timers(
+    admin_ctx: CurrentAdmin,
+    delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
+):
+    stats = await delivery_service.sweep_delivery_timers()
+    return {"detail": "Delivery SLA & offer timer sweep completed", "stats": stats}

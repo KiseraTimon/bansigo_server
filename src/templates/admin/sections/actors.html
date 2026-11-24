@@ -52,7 +52,7 @@
                         <tbody>
                             {% if actors and actors.riders and actors.riders|length > 0 %}
                                 {% for r in actors.riders %}
-                                    <tr>
+                                    <tr {% if r.approval_status != 'new' %}onclick="openRiderSubmissionModal({{ r.id }})" style="cursor: pointer;" title="Click to view submitted documents"{% endif %}>
                                         <td>
                                             <div class="fw-semibold">{{ r.name }}</div>
                                             <div class="text-muted" style="font-size: 0.72rem;">ID #RDR-{{ r.id }}</div>
@@ -65,7 +65,9 @@
                                         </td>
                                         <td>{{ r.deliveries_completed }}</td>
                                         <td>
-                                            {% if r.approval_status == 'approved' %}
+                                            {% if r.approval_status == 'new' %}
+                                                <span class="badge bg-info-subtle text-info-emphasis">New (No Docs)</span>
+                                            {% elif r.approval_status == 'approved' %}
                                                 <span class="badge bg-success-subtle text-success">Approved</span>
                                             {% elif r.approval_status == 'pending' %}
                                                 <span class="badge bg-warning-subtle text-warning-emphasis">Pending Vetting</span>
@@ -75,24 +77,26 @@
                                                 <span class="badge bg-secondary-subtle text-secondary">{{ r.approval_status | capitalize }}</span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-end">
-                                            <div class="btn-group btn-group-sm">
-                                                {% if r.approval_status != 'approved' %}
-                                                    <button type="button" class="btn btn-outline-success" onclick="vetRiderAction({{ r.id }}, 'approve', '{{ r.name }}')" title="Approve Rider" aria-label="Approve Rider">
-                                                        <i class="ri-check-line pointer-events-none"></i> Approve
+                                        <td class="text-end" onclick="event.stopPropagation()">
+                                            {% if r.approval_status == 'new' %}
+                                                <span class="text-muted small">—</span>
+                                            {% else %}
+                                                <div class="btn-group btn-group-sm">
+                                                    <button type="button" class="btn btn-outline-primary" onclick="event.stopPropagation(); openRiderSubmissionModal({{ r.id }})" title="View Submission" aria-label="View Submission">
+                                                        <i class="ri-eye-line pointer-events-none"></i> Review
                                                     </button>
-                                                {% endif %}
-                                                {% if r.approval_status != 'suspended' %}
-                                                    <button type="button" class="btn btn-outline-warning" onclick="vetRiderAction({{ r.id }}, 'suspend', '{{ r.name }}')" title="Suspend Rider" aria-label="Suspend Rider">
-                                                        <i class="ri-pause-circle-line pointer-events-none"></i> Suspend
-                                                    </button>
-                                                {% endif %}
-                                                {% if r.approval_status != 'rejected' %}
-                                                    <button type="button" class="btn btn-outline-danger" onclick="vetRiderAction({{ r.id }}, 'reject', '{{ r.name }}')" title="Reject Rider" aria-label="Reject Rider">
-                                                        <i class="ri-close-circle-line pointer-events-none"></i>
-                                                    </button>
-                                                {% endif %}
-                                            </div>
+                                                    {% if r.approval_status != 'suspended' %}
+                                                        <button type="button" class="btn btn-outline-warning" onclick="vetRiderAction({{ r.id }}, 'suspend', '{{ r.name }}')" title="Suspend Rider" aria-label="Suspend Rider">
+                                                            <i class="ri-pause-circle-line pointer-events-none"></i> Suspend
+                                                        </button>
+                                                    {% endif %}
+                                                    {% if r.approval_status != 'rejected' %}
+                                                        <button type="button" class="btn btn-outline-danger" onclick="vetRiderAction({{ r.id }}, 'reject', '{{ r.name }}')" title="Reject Rider" aria-label="Reject Rider">
+                                                            <i class="ri-close-circle-line pointer-events-none"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                </div>
+                                            {% endif %}
                                         </td>
                                     </tr>
                                 {% endfor %}

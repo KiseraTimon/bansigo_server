@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from config import Settings
-from src.exceptions import ForbiddenError, NotFoundError
+from src.exceptions import BusinessRuleError, ForbiddenError, NotFoundError
 from src.models import (
     Admin, AdminLevel, ApprovalStatus, AuditLog, Brand, Category, Customer, Delivery,
     Inventory, Order, OrderStatus, Product, Rider, Staff, User, UserRole,
@@ -112,6 +112,22 @@ class AdminService:
             "pending_riders": pending_riders,
             "total_orders": total_orders,
             "total_revenue": f"{total_revenue_val:.2f}",
+            "manual_dispatch_count": (
+                await self.db.execute(
+                    select(func.count(Delivery.id)).where(
+                        Delivery.needs_manual_assignment.is_(True),
+                        Delivery.status == "unassigned",
+                    )
+                )
+            ).scalar_one() or 0,
+            "overdue_delivery_count": (
+                await self.db.execute(
+                    select(func.count(Delivery.id)).where(
+                        Delivery.is_overdue.is_(True),
+                        Delivery.status.notin_(["delivered", "cancelled"]),
+                    )
+                )
+            ).scalar_one() or 0,
             "recent_audits": [
                 {
                     "id": a.id,
@@ -242,8 +258,17 @@ class AdminService:
                     "user_id": r.user_id,
                     "name": f"{r.user.first_name} {r.user.last_name}" if r.user else "Unknown",
                     "phone": r.user.phone if r.user else "-",
+                    "email": r.user.email if r.user else "-",
+                    "national_id_number": r.national_id_number,
+                    "id_card_front_url": r.id_card_front_url,
+                    "id_card_back_url": r.id_card_back_url,
                     "vehicle_type": r.vehicle_type.value if hasattr(r.vehicle_type, "value") else str(r.vehicle_type),
                     "vehicle_plate": r.vehicle_plate or "-",
+                    "vehicle_description": r.vehicle_description,
+                    "vehicle_proof_url": r.vehicle_proof_url,
+                    "licence_number": r.licence_number,
+                    "licence_expiry": r.licence_expiry.isoformat() if r.licence_expiry else None,
+                    "driving_licence_url": r.driving_licence_url,
                     "approval_status": r.approval_status.value if hasattr(r.approval_status, "value") else str(r.approval_status),
                     "status": r.status.value if hasattr(r.status, "value") else str(r.status),
                     "rating_average": str(r.rating_average or "5.00"),
@@ -280,6 +305,34 @@ class AdminService:
             ],
         }
 
+    async def get_rider_detail(self, rider_id: int) -> dict[str, Any]:
+        stmt = select(Rider).options(selectinload(Rider.user)).where(Rider.id == rider_id)
+        rider = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not rider:
+            raise NotFoundError("Rider not found")
+        return {
+            "id": rider.id,
+            "user_id": rider.user_id,
+            "name": f"{rider.user.first_name} {rider.user.last_name}" if rider.user else "Unknown",
+            "phone": rider.user.phone if rider.user else "-",
+            "email": rider.user.email if rider.user else "-",
+            "national_id_number": rider.national_id_number,
+            "id_card_front_url": rider.id_card_front_url,
+            "id_card_back_url": rider.id_card_back_url,
+            "vehicle_type": rider.vehicle_type.value if hasattr(rider.vehicle_type, "value") else str(rider.vehicle_type),
+            "vehicle_plate": rider.vehicle_plate,
+            "vehicle_description": rider.vehicle_description,
+            "vehicle_proof_url": rider.vehicle_proof_url,
+            "licence_number": rider.licence_number,
+            "licence_expiry": rider.licence_expiry.isoformat() if rider.licence_expiry else None,
+            "driving_licence_url": rider.driving_licence_url,
+            "approval_status": rider.approval_status.value if hasattr(rider.approval_status, "value") else str(rider.approval_status),
+            "status": rider.status.value if hasattr(rider.status, "value") else str(rider.status),
+            "rating_average": str(rider.rating_average or "5.00"),
+            "deliveries_completed": rider.deliveries_completed,
+            "approved_at": rider.approved_at.isoformat() if rider.approved_at else None,
+        }
+
     # rider vetting
     async def vet_rider(self, rider_id: int, new_status: ApprovalStatus, actor_id: int) -> Rider:
         """
@@ -288,6 +341,9 @@ class AdminService:
         rider = await self.riders.get_by_id(rider_id)
         if not rider:
             raise NotFoundError("Rider not found")
+
+        if rider.approval_status == ApprovalStatus.NEW and new_status == ApprovalStatus.APPROVED:
+            raise BusinessRuleError("Cannot approve a rider who has not submitted documents")
 
         old_status = rider.approval_status
         rider.approval_status = new_status
@@ -558,3 +614,71 @@ class AdminService:
             after={"password_hash": "[REDACTED]"},
         )
         await self.db.commit()
+
+    # dispatch & deliveries queue for store operators
+    async def get_dispatch_queue_data(self, limit: int = 80) -> dict[str, Any]:
+        """Fetches unassigned/manual/overdue/active deliveries and dispatchable riders for manual assignment."""
+        from src.models import DeliveryStatus, RiderStatus
+        from src.security import make_pickup_code
+
+        stmt = (
+            select(Delivery)
+            .options(
+                selectinload(Delivery.order),
+                selectinload(Delivery.rider).selectinload(Rider.user),
+            )
+            .where(Delivery.status != DeliveryStatus.CANCELLED)
+            .order_by(Delivery.needs_manual_assignment.desc(), Delivery.is_overdue.desc(), Delivery.id.desc())
+            .limit(limit)
+        )
+        rows = list((await self.db.execute(stmt)).scalars().all())
+        secret = self.settings.secret_key.get_secret_value()
+
+        deliveries_list = []
+        for d in rows:
+            order = d.order
+            rider_name = (
+                f"{d.rider.user.first_name} {d.rider.user.last_name}"
+                if d.rider and d.rider.user else None
+            )
+            deliveries_list.append({
+                "id": d.id,
+                "order_id": d.order_id,
+                "order_number": order.order_number if order else f"ORD-{d.order_id}",
+                "order_status": order.status.value if order else "-",
+                "status": d.status.value,
+                "rider_id": d.rider_id,
+                "rider_name": rider_name,
+                "rider_fee": f"{d.rider_fee:.2f}",
+                "address_text": order.delivery_address_text if order else "",
+                "recipient_name": order.delivery_recipient_name if order else "",
+                "needs_manual_assignment": d.needs_manual_assignment,
+                "manual_assignment_reason": d.manual_assignment_reason,
+                "rejection_count": d.rejection_count,
+                "is_overdue": d.is_overdue,
+                "pickup_code": make_pickup_code(secret, d.id, self.settings.pickup_code_length),
+                "created_at": d.created_at.strftime("%Y-%m-%d %H:%M") if d.created_at else "",
+            })
+
+        rider_stmt = (
+            select(Rider)
+            .options(selectinload(Rider.user))
+            .where(
+                Rider.approval_status == ApprovalStatus.APPROVED,
+                Rider.status != RiderStatus.OFFLINE,
+            )
+            .order_by(Rider.status, Rider.penalty_points)
+        )
+        riders = list((await self.db.execute(rider_stmt)).scalars().all())
+        eligible_riders = [
+            {
+                "id": r.id,
+                "name": f"{r.user.first_name} {r.user.last_name}" if r.user else f"Rider #{r.id}",
+                "status": r.status.value,
+                "vehicle_type": r.vehicle_type.value,
+                "penalty_points": r.penalty_points,
+                "unjustified_rejections": r.unjustified_rejections_count,
+            }
+            for r in riders
+        ]
+        return {"deliveries": deliveries_list, "eligible_riders": eligible_riders}

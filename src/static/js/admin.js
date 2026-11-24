@@ -928,4 +928,42 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+  // -------------------------------------------------------------------------
+  // Dispatch & Manual Assignment Operations
+  // -------------------------------------------------------------------------
+  window.manualAssignDelivery = async function (deliveryId) {
+    const select = document.getElementById(`assignRider_${deliveryId}`);
+    const riderId = select ? select.value : '';
+    if (!riderId) {
+      window.showToast('Please select an online approved rider first.', 'warning');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('rider_id', riderId);
+    const res = await fetch(`${BASE_URL}/deliveries/${deliveryId}/assign`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.hash = 'dispatch';
+      window.location.reload();
+    } else {
+      window.showToast(data.detail || 'Manual assignment failed', 'error');
+    }
+  };
+
+  window.autoDispatchDelivery = async function (deliveryId) {
+    const res = await fetch(`${BASE_URL}/deliveries/${deliveryId}/auto-dispatch`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'Dispatch attempted', data.assigned ? 'success' : 'warning');
+    window.location.hash = 'dispatch';
+    window.location.reload();
+  };
+
+  window.triggerSlaSweep = async function () {
+    const res = await fetch(`${BASE_URL}/deliveries/sweep`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'SLA Sweep completed', 'success');
+    window.location.hash = 'dispatch';
+    window.location.reload();
+  };
 });

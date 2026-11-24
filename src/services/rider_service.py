@@ -13,13 +13,17 @@ TODO (model note): last_latitude/longitude/last_seen_at change every few seconds
 the DB here for now; the model's TODO says to move them to Redis, and only this file needs to change when you do.
 """
 
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
+import uuid
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.exceptions import AppError, BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
-from src.models import ApprovalStatus, Rider, RiderStatus, User, UserRole, VehicleType
+from src.models import ApprovalStatus, Delivery, DeliveryStatus, PaymentMethod, Rider, RiderPayout, RiderStatus, User, UserRole, VehicleType
 from src.repositories import RiderRepository
 from src.schemas import RiderApply, RiderGoStatus, RiderLocation
 from utilities import utc_now
@@ -70,7 +74,7 @@ class RiderService:
             existing_rider.approval_status = ApprovalStatus.PENDING
             rider = existing_rider
         else:
-            rider = Rider(user_id=user.id, **data.model_dump())
+            rider = Rider(user_id=user.id, approval_status=ApprovalStatus.PENDING, **data.model_dump())
             self.db.add(rider)
 
         try:
@@ -129,6 +133,8 @@ class RiderService:
             raise AppError("A reason is required")
 
         before = rider.approval_status
+        if before is ApprovalStatus.NEW and to is ApprovalStatus.APPROVED:
+            raise BusinessRuleError("Cannot approve a rider before they submit vetting documents")
         if before is to:
             raise BusinessRuleError(f"The rider is already {to.value}")
 
@@ -160,3 +166,125 @@ class RiderService:
 
     async def list_dispatchable(self) -> list[Rider]:
         return await self.riders.list_dispatchable()
+
+    async def get_wallet(self, user: User) -> dict:
+        rider = await self.for_user(user)
+        now = utc_now()
+        today = now.date()
+        week_ago = now - timedelta(days=7)
+
+        deliv_stmt = (
+            select(Delivery)
+            .where(Delivery.rider_id == rider.id, Delivery.status == DeliveryStatus.DELIVERED)
+            .options(selectinload(Delivery.order))
+            .order_by(Delivery.delivered_at.desc())
+        )
+        delivered = list((await self.db.execute(deliv_stmt)).scalars().all())
+
+        payout_stmt = (
+            select(RiderPayout)
+            .where(RiderPayout.rider_id == rider.id)
+            .order_by(RiderPayout.created_at.desc())
+        )
+        payouts = list((await self.db.execute(payout_stmt)).scalars().all())
+
+        total_earnings = sum((d.rider_fee for d in delivered), Decimal("0.00"))
+        today_earnings = sum(
+            (d.rider_fee for d in delivered if d.delivered_at and d.delivered_at.date() == today),
+            Decimal("0.00"),
+        )
+        weekly_earnings = sum(
+            (d.rider_fee for d in delivered if d.delivered_at and d.delivered_at >= week_ago),
+            Decimal("0.00"),
+        )
+        total_distance_km = round(sum((d.estimated_distance_m or 0) / 1000.0 for d in delivered), 2)
+        completed_count = len(delivered)
+        avg_fee = (total_earnings / completed_count).quantize(Decimal("0.01")) if completed_count > 0 else Decimal("0.00")
+
+        cod_cash_in_hand = sum(
+            (
+                d.order.total_amount
+                for d in delivered
+                if d.order and d.order.payment_method == PaymentMethod.CASH
+                and d.delivered_at and d.delivered_at.date() == today
+            ),
+            Decimal("0.00"),
+        )
+
+        total_withdrawn = sum((p.amount for p in payouts), Decimal("0.00"))
+        available_balance = max(Decimal("0.00"), total_earnings - total_withdrawn)
+
+        tx_items: list[tuple[float, dict]] = []
+        for d in delivered:
+            ts = d.delivered_at or d.updated_at or d.created_at
+            order_num = f"#{d.order.order_number}" if d.order else f"#{d.order_id}"
+            tx_items.append((
+                ts.timestamp() if ts else 0.0,
+                {
+                    "id": f"earn-{d.id}",
+                    "order_number": order_num,
+                    "amount": d.rider_fee,
+                    "type": "DELIVERY_EARNING",
+                    "description": f"Delivery Fee: Order {order_num}",
+                    "timestamp": ts.strftime("%b %d, %I:%M %p") if ts else "-",
+                    "distance_km": round((d.estimated_distance_m or 0) / 1000.0, 2),
+                    "status": "Completed",
+                    "reference_code": f"EARN-{d.id}",
+                },
+            ))
+
+        for p in payouts:
+            ts = p.created_at
+            tx_items.append((
+                ts.timestamp() if ts else 0.0,
+                {
+                    "id": f"payout-{p.id}",
+                    "order_number": "MPESA-B2C",
+                    "amount": p.amount,
+                    "type": "PAYOUT_WITHDRAWAL",
+                    "description": f"M-Pesa Payout: {p.phone}",
+                    "timestamp": ts.strftime("%b %d, %I:%M %p") if ts else "-",
+                    "distance_km": None,
+                    "status": p.status,
+                    "reference_code": p.reference_code,
+                },
+            ))
+
+        tx_items.sort(key=lambda x: x[0], reverse=True)
+
+        return {
+            "total_earnings": total_earnings,
+            "available_balance": available_balance,
+            "cod_cash_in_hand": cod_cash_in_hand,
+            "today_earnings": today_earnings,
+            "weekly_earnings": weekly_earnings,
+            "completed_trips_count": completed_count,
+            "pending_payouts": Decimal("0.00"),
+            "average_trip_fee": avg_fee,
+            "total_distance_km": total_distance_km,
+            "transactions": [item[1] for item in tx_items],
+        }
+
+    async def withdraw_wallet(self, user: User, amount: Decimal, phone: str) -> tuple[RiderPayout, Decimal]:
+        if amount < Decimal("50.00"):
+            raise AppError("Minimum withdrawal is KES 50.00")
+
+        wallet = await self.get_wallet(user)
+        available = wallet["available_balance"]
+        if amount > available:
+            raise BusinessRuleError(f"Insufficient balance (Available: KES {available:.2f})")
+
+        rider = await self.for_user(user)
+        ref = f"QK{uuid.uuid4().hex[:8].upper()}"
+        payout = RiderPayout(
+            rider_id=rider.id,
+            amount=amount,
+            phone=phone,
+            reference_code=ref,
+            status="Settled",
+        )
+        self.db.add(payout)
+        await self.db.commit()
+        await self.db.refresh(payout)
+        new_balance = max(Decimal("0.00"), available - amount)
+        return payout, new_balance
