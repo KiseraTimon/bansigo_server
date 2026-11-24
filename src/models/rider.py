@@ -21,6 +21,7 @@ class ApprovalStatus(enum.Enum):
     """
     vetting state of a rider.
     """
+    NEW = "new"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -63,7 +64,7 @@ class Rider(Base, TimestampMixin):
 
     # vetting
     approval_status: Mapped[ApprovalStatus] = mapped_column(
-        str_enum(ApprovalStatus), nullable=False, default=ApprovalStatus.PENDING
+        str_enum(ApprovalStatus), nullable=False, default=ApprovalStatus.NEW
     )
     approved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     approved_by: Mapped[Optional[int]] = mapped_column(
@@ -100,6 +101,13 @@ class Rider(Base, TimestampMixin):
     rating_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     deliveries_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
+    # reliability, rejections & overdue penalty tracking
+    unjustified_rejections_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_rejections_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    overdue_deliveries_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    penalty_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    dispatch_cooldown_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+
     # relationships
     user: Mapped["User"] = relationship(back_populates="rider", foreign_keys=[user_id], lazy="raise")
     deliveries: Mapped[list["Delivery"]] = relationship(back_populates="rider", lazy="raise")
@@ -117,4 +125,25 @@ class Rider(Base, TimestampMixin):
 
         # the dispatcher's query: approved riders who are available
         Index("idx_rider_dispatch", "approval_status", "status"),
+    )
+
+
+class RiderPayout(Base, TimestampMixin):
+    """
+    persisted M-Pesa B2C payout withdrawals requested by a rider.
+    """
+
+    __tablename__ = "rider_payouts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rider_id: Mapped[int] = mapped_column(
+        ForeignKey("riders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    reference_code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="Settled")
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_rider_payout_positive"),
     )
