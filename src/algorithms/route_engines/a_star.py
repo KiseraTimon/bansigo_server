@@ -15,7 +15,7 @@ from .edge_weights import (
     calculate_edge_weight,
 )
 from .spatial_index import haversine_distance_m
-from .types import RouteResult, RouteStep, RoutingAlgorithm
+from .types import RouteResult, RouteStep, RoutingAlgorithm, populate_turn_instructions
 
 log = get_logger(__name__)
 
@@ -163,6 +163,8 @@ class AStarRouter:
             else:
                 if step_coords:
                     all_coords.extend(step_coords[1:])
+
+        populate_turn_instructions(steps)
 
         return RouteResult(
             algorithm=RoutingAlgorithm.A_STAR,
