@@ -1,0 +1,99 @@
+<!-- src/templates/admin/sections/dispatch.html -->
+<div class="admin-tab-pane" id="dispatchTab">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1" style="color: var(--text-heading);">Dispatch &amp; Delivery Operations</h4>
+            <p class="text-muted small mb-0">
+                Monitor auto-dispatched orders, handle manual fallback assignments, view store pickup codes, and enforce delivery SLAs.
+            </p>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" onclick="window.triggerSlaSweep()">
+            <i class="ri-timer-flash-line me-1"></i>Run SLA &amp; Timeout Sweep
+        </button>
+    </div>
+
+    <!-- Dispatch Table -->
+    <div class="admin-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Destination</th>
+                        <th>Delivery Status</th>
+                        <th>Store Pickup PIN</th>
+                        <th>Assigned Rider</th>
+                        <th>Manual Assign / Re-Dispatch</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if dispatch_data and dispatch_data.deliveries %}
+                        {% for d in dispatch_data.deliveries %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold">{{ d.order_number }}</div>
+                                <div class="small text-muted">Order: {{ d.order_status }} • KES {{ d.rider_fee }}</div>
+                                {% if d.is_overdue %}
+                                    <span class="badge bg-danger mt-1">OVERDUE SLA</span>
+                                {% endif %}
+                                {% if d.needs_manual_assignment %}
+                                    <span class="badge bg-warning text-dark mt-1">MANUAL NEEDED</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-semibold small">{{ d.recipient_name or 'Customer' }}</div>
+                                <div class="small text-muted text-truncate" style="max-width: 220px;">{{ d.address_text or 'Migori' }}</div>
+                                {% if d.manual_assignment_reason %}
+                                    <div class="small text-danger">{{ d.manual_assignment_reason }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border text-uppercase">{{ d.status }}</span>
+                                {% if d.rejection_count > 0 %}
+                                    <div class="small text-muted mt-1">{{ d.rejection_count }} rejection(s)</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-primary-subtle text-primary fw-bold px-2 py-1" style="letter-spacing: 0.1em; font-size: 0.85rem;">
+                                    {{ d.pickup_code }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if d.rider_name %}
+                                    <div class="fw-semibold small">{{ d.rider_name }}</div>
+                                    <div class="small text-muted">Rider #{{ d.rider_id }}</div>
+                                {% else %}
+                                    <span class="text-muted small">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if d.status == 'unassigned' %}
+                                <div class="d-flex gap-2 align-items-center">
+                                    <select class="form-select form-select-sm" id="assignRider_{{ d.id }}" style="min-width: 150px;">
+                                        <option value="">Select Rider...</option>
+                                        {% for r in dispatch_data.eligible_riders %}
+                                            <option value="{{ r.id }}">{{ r.name }} ({{ r.status }}, {{ r.penalty_points }} pts)</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-sm btn-primary" onclick="window.manualAssignDelivery({{ d.id }})">Assign</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="window.autoDispatchDelivery({{ d.id }})">Auto</button>
+                                </div>
+                                {% else %}
+                                    <span class="small text-muted">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="ri-motorbike-line fs-2 d-block mb-2 opacity-50"></i>
+                                No deliveries found yet. Paid delivery orders appear here automatically.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

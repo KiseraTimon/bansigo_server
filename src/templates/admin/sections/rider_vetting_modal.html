@@ -1,0 +1,26 @@
+<!-- src/templates/admin/sections/rider_vetting_modal.html -->
+<div class="modal fade" id="riderVettingModal" tabindex="-1" aria-labelledby="riderVettingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-bottom bg-light" style="border-top-left-radius: 16px; border-top-right-radius: 16px;">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="riderVettingModalLabel" style="color: var(--text-heading);">
+                        <i class="ri-ebike-2-line me-1 text-primary"></i> Rider Vetting Submission
+                    </h5>
+                    <div class="small text-muted" id="rvModalSubtitle">Loading rider details...</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="rvModalBody">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                    Loading rider submission...
+                </div>
+            </div>
+            <div class="modal-footer border-top bg-light d-flex justify-content-between" id="rvModalFooter" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <div class="d-flex gap-2" id="rvModalActions"></div>
+            </div>
+        </div>
+    </div>
+</div>
