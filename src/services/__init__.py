@@ -7,6 +7,7 @@ from .auth_service import AuthService
 from .catalogue_service import CatalogueService
 from .delivery_service import DeliveryService
 from .inventory_service import InventoryService
+from .notification_service import NotificationService
 from .order_service import OrderService
 from .payment_service import PaymentService
 from .refund_service import RefundService
@@ -22,6 +23,7 @@ __all__ = [
     "CatalogueService",
     "DeliveryService",
     "InventoryService",
+    "NotificationService",
     "OrderService",
     "PaymentService",
     "RefundService",

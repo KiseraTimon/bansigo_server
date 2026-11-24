@@ -8,6 +8,7 @@ from .catalogue_repository import BrandRepository, CategoryRepository, ProductRe
 from .customer_repository import CustomerRepository, CustomerStats
 from .delivery_repository import DeliveryRepository, RiderRepository
 from .inventory_repository import InventoryRepository, StockMovementRepository
+from .notification_repository import NotificationRepository
 from .order_repository import OrderRepository
 from .payment_repository import PaymentEventRepository, PaymentRepository, RefundRepository
 from .review_repository import ReviewRepository
@@ -27,6 +28,7 @@ __all__ = [
     "DeliveryRepository",
     "DeliveryZoneRepository",
     "InventoryRepository",
+    "NotificationRepository",
     "OrderRepository",
     "PaymentEventRepository",
     "PaymentRepository",

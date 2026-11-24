@@ -7,6 +7,7 @@ from src.routers.customer import customer_router
 from src.routers.rider import rider_router
 from src.routers.server import (
     admin_router,
+    mpesa_callbacks_router,
     server_auth_router,
     server_profiles_router,
 )
@@ -17,6 +18,7 @@ router = APIRouter()
 # public API routers
 router.include_router(server_auth_router, prefix="/api/auth", tags=["auth"])   # auth ops
 router.include_router(server_profiles_router, prefix="/api/users", tags=["users"])    # profile ops
+router.include_router(mpesa_callbacks_router, prefix="/api/payments", tags=["payments"])  # Daraja callbacks
 router.include_router(customer_router, prefix="/api/customer", tags=["customer"])    # customer ops
 router.include_router(rider_router, prefix="/api/rider", tags=["rider"])    # rider ops
 

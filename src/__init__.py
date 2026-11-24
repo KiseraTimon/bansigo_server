@@ -24,12 +24,78 @@ TEMPLATES_DIR = f"{path.resolve().parent}/templates"
 
 
 # database instance
+def _sync_missing_columns(sync_conn) -> None:
+    """Idempotently adds newly introduced columns on existing database tables (e.g. MySQL dump)."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(sync_conn)
+    existing_tables = set(inspector.get_table_names())
+    alterations = {
+        "deliveries": [
+            ("offer_expires_at", "DATETIME NULL"),
+            ("pickup_due_at", "DATETIME NULL"),
+            ("delivery_due_at", "DATETIME NULL"),
+            ("is_overdue", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("overdue_notified_at", "DATETIME NULL"),
+            ("overdue_escalated_at", "DATETIME NULL"),
+            ("needs_manual_assignment", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("manual_assignment_reason", "VARCHAR(255) NULL"),
+            ("rejection_count", "INT NOT NULL DEFAULT 0"),
+            ("pickup_code_hash", "VARCHAR(64) NULL"),
+            ("pickup_attempts", "INT NOT NULL DEFAULT 0"),
+        ],
+        "riders": [
+            ("unjustified_rejections_count", "INT NOT NULL DEFAULT 0"),
+            ("total_rejections_count", "INT NOT NULL DEFAULT 0"),
+            ("overdue_deliveries_count", "INT NOT NULL DEFAULT 0"),
+            ("penalty_points", "INT NOT NULL DEFAULT 0"),
+            ("dispatch_cooldown_until", "DATETIME NULL"),
+        ],
+        "notifications": [
+            ("external_key", "VARCHAR(64) NULL"),
+            ("is_deleted", "BOOLEAN NOT NULL DEFAULT 0"),
+        ],
+    }
+
+    for table, cols in alterations.items():
+        if table not in existing_tables:
+            continue
+        present = {c["name"] for c in inspector.get_columns(table)}
+        for col_name, col_def in cols:
+            if col_name not in present:
+                sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
+
+
+async def _delivery_sweeper_loop(settings: Settings) -> None:
+    """Background loop checking delivery offer timeouts, overdue SLAs, and unpaid M-Pesa sweeps."""
+    import asyncio
+    from src.database import AsyncSessionLocal
+    from src.services.delivery_service import DeliveryService
+    from utilities import get_logger
+
+    log = get_logger(__name__)
+    interval = max(5, int(getattr(settings, "delivery_sweeper_interval_seconds", 20)))
+
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            async with AsyncSessionLocal() as session:
+                svc = DeliveryService(session, settings)
+                await svc.sweep_delivery_timers()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Delivery sweeper iteration failed: %s", exc)
+
+
 async def lifespan(app: FastAPI):
+    import asyncio
     # db startup
     import src.models   # noqa: F401
     async with engine.begin() as conn:
         # idempotent database creation
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_sync_missing_columns)
 
     # Seed default delivery zones for Migori if table is empty
     from sqlalchemy import select
@@ -52,9 +118,21 @@ async def lifespan(app: FastAPI):
     from src.algorithms.route_engines import init_router
     router = init_router()
     app.state.road_router = router
+
+    sweeper_task = None
+    settings = get_settings()
+    if settings.app_env != "testing":
+        sweeper_task = asyncio.create_task(_delivery_sweeper_loop(settings))
+
     yield
 
     # shutdowns
+    if sweeper_task is not None:
+        sweeper_task.cancel()
+        try:
+            await sweeper_task
+        except asyncio.CancelledError:
+            pass
     from src.dependencies import get_mpesa_client
     if get_mpesa_client.cache_info().currsize:
         await get_mpesa_client().aclose()
