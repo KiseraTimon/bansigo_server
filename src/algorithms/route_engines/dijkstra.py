@@ -13,7 +13,7 @@ from .edge_weights import (
     calculate_edge_travel_time_s,
     calculate_edge_weight,
 )
-from .types import RouteResult, RouteStep, RoutingAlgorithm
+from .types import RouteResult, RouteStep, RoutingAlgorithm, populate_turn_instructions
 
 log = get_logger(__name__)
 
@@ -186,6 +186,8 @@ class DijkstraRouter:
             else:
                 if step_coords:
                     all_coords.extend(step_coords[1:])
+
+        populate_turn_instructions(steps)
 
         return RouteResult(
             algorithm=RoutingAlgorithm.DIJKSTRA,
