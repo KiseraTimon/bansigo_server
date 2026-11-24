@@ -38,7 +38,7 @@ from src.models import (
     UserRole,
     VehicleType,
 )
-from src.security import create_access_token, hash_password_async, make_handover_code
+from src.security import create_access_token, hash_password_async, make_handover_code, make_pickup_code
 
 
 @pytest_asyncio.fixture
@@ -466,8 +466,19 @@ async def test_rider_lifecycle_navigation_and_dispatch(app_client: AsyncClient, 
     assert resp_accept.status_code == 200
     assert resp_accept.json()["status"] == "accepted"
 
-    # 9. Pickup parcel at Bansi Mega Supermarket
-    resp_pick = await app_client.post(f"/api/rider/deliveries/{delivery.id}/pickup", headers=rider_headers)
+    # 9. Verify pickup code notification was sent and pickup parcel at Bansi Mega Supermarket
+    notif_resp = await app_client.get("/api/rider/notifications", headers=rider_headers)
+    assert notif_resp.status_code == 200
+    pickup_notifs = [n for n in notif_resp.json()["items"] if n["type"] == "pickup_code"]
+    assert len(pickup_notifs) >= 1
+    pickup_code = make_pickup_code(settings.secret_key.get_secret_value(), delivery.id, settings.pickup_code_length)
+    assert pickup_code in pickup_notifs[0]["title"]
+
+    resp_pick = await app_client.post(
+        f"/api/rider/deliveries/{delivery.id}/pickup",
+        json={"pickup_code": pickup_code},
+        headers=rider_headers,
+    )
     assert resp_pick.status_code == 200
     assert resp_pick.json()["status"] == "picked_up"
 
