@@ -176,17 +176,48 @@ class RoadNetworkRouter:
         riders: Sequence[Any],
         target_lat: float,
         target_lon: float,
+        *,
+        active_load_by_rider: Optional[dict[int, int]] = None,
+        active_dropoffs_by_rider: Optional[dict[int, list[tuple[float, float]]]] = None,
+        has_departed_by_rider: Optional[dict[int, bool]] = None,
+        max_active_deliveries: int = 3,
+        max_batch_detour_km: float = 3.0,
+        exclude_rider_ids: Optional[set[int]] = None,
     ) -> Optional[tuple[Any, RouteResult, RouteResult]]:
         """
         Identifies the optimal rider for a dispatch job by computing ETA from rider to supermarket,
-        combined with delivery route from supermarket to customer destination.
+        combined with delivery route from supermarket to customer destination, while supporting
+        multi-order batching up to `max_active_deliveries` within `max_batch_detour_km`.
         Returns: (best_rider, route_to_supermarket, route_to_customer) or None
         """
-        candidates = [
-            r for r in riders
-            if getattr(r, "last_latitude", None) is not None
-            and getattr(r, "last_longitude", None) is not None
-        ]
+        excluded = exclude_rider_ids or set()
+        load_map = active_load_by_rider or {}
+        dropoffs_map = active_dropoffs_by_rider or {}
+        departed_map = has_departed_by_rider or {}
+
+        candidates = []
+        for r in riders:
+            rid = getattr(r, "id", None)
+            if rid in excluded:
+                continue
+            current_load = load_map.get(rid, 0)
+            if current_load >= max_active_deliveries:
+                continue
+            # Do not batch onto a rider who already departed the store unless they are close to store
+            if departed_map.get(rid, False) and current_load > 0:
+                continue
+            # Check batch spatial coherence with rider's existing dropoffs
+            existing_dropoffs = dropoffs_map.get(rid, [])
+            if existing_dropoffs:
+                min_dropoff_dist_km = min(
+                    haversine_distance_m(target_lat, target_lon, d_lat, d_lon) / 1000.0
+                    for d_lat, d_lon in existing_dropoffs
+                )
+                if min_dropoff_dist_km > max_batch_detour_km:
+                    continue
+            if getattr(r, "last_latitude", None) is not None and getattr(r, "last_longitude", None) is not None:
+                candidates.append(r)
+
         if not candidates:
             return None
 
@@ -200,6 +231,7 @@ class RoadNetworkRouter:
         for rider in candidates:
             r_lat = float(rider.last_latitude)
             r_lon = float(rider.last_longitude)
+            rid = getattr(rider, "id", None)
 
             try:
                 # Route from rider's current position to supermarket
@@ -211,16 +243,24 @@ class RoadNetworkRouter:
                 )
                 total_duration = rider_to_store.total_duration_s + store_to_customer.total_duration_s
 
+                # Prefer idle riders over already-loaded riders (+180s per active order)
+                current_load = load_map.get(rid, 0)
+                load_penalty_s = current_load * 180.0
+
+                # Penalize riders with accumulated rejection/overdue penalty points (+10s per point)
+                penalty_pts = float(getattr(rider, "penalty_points", 0) or 0)
+                reliability_penalty_s = penalty_pts * 10.0
+
                 # Small tie-breaking adjustment for higher rated riders
                 rating = float(getattr(rider, "rating_average", 0.0) or 0.0)
-                score = total_duration - (rating * 30.0)  # 30 second bonus per star
+                score = total_duration + load_penalty_s + reliability_penalty_s - (rating * 30.0)
 
                 if score < min_total_duration:
                     min_total_duration = score
                     best_rider = rider
                     best_rider_route = rider_to_store
             except Exception as e:
-                log.warning("Could not calculate route for rider %s: %s", getattr(rider, "id", None), e)
+                log.warning("Could not calculate route for rider %s: %s", rid, e)
 
         if best_rider and best_rider_route:
             return best_rider, best_rider_route, store_to_customer
