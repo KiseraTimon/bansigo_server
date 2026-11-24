@@ -10,22 +10,29 @@ from src.dependencies import (
     CurrentUser,
     RiderUser,
     get_delivery_service,
+    get_notification_service,
     get_rider_service,
 )
 from src.schemas import (
     DeliveryComplete,
     DeliveryFail,
     DeliveryOut,
+    DeliveryPickup,
     DeliveryRespond,
     Detail,
+    NotificationListOut,
+    NotificationOut,
     RiderApply,
     RiderDeliveryDetailOut,
     RiderGoStatus,
     RiderLocation,
     RiderNavigationOut,
     RiderOut,
+    RiderWalletOut,
+    RiderWithdrawOut,
+    RiderWithdrawRequest,
 )
-from src.services import DeliveryService, RiderService
+from src.services import DeliveryService, NotificationService, RiderService
 from utilities import get_logger
 
 
@@ -37,6 +44,7 @@ router = APIRouter(tags=["rider-deliveries"])
 # Dependencies
 DeliveryServiceDep = Annotated[DeliveryService, Depends(get_delivery_service)]
 RiderServiceDep = Annotated[RiderService, Depends(get_rider_service)]
+NotificationServiceDep = Annotated[NotificationService, Depends(get_notification_service)]
 
 
 # Profile & availability
@@ -185,7 +193,13 @@ async def respond_to_delivery_offer(
     user: RiderUser,
     service: DeliveryServiceDep,
 ) -> DeliveryOut:
-    delivery = await service.respond(delivery_id, user, data.accept)
+    delivery = await service.respond(
+        delivery_id,
+        user,
+        data.accept,
+        reason_code=data.reason_code,
+        reason_text=data.reason_text,
+    )
     return DeliveryOut.model_validate(delivery)
 
 
@@ -193,14 +207,15 @@ async def respond_to_delivery_offer(
     "/deliveries/{delivery_id}/pickup",
     response_model=DeliveryOut,
     status_code=status.HTTP_200_OK,
-    summary="Mark parcel picked up at Bansi Mega Supermarket",
+    summary="Verify store pickup code and mark parcel picked up at Bansi Mega Supermarket",
 )
 async def pickup_delivery(
     delivery_id: int,
+    data: DeliveryPickup,
     user: RiderUser,
     service: DeliveryServiceDep,
 ) -> DeliveryOut:
-    delivery = await service.pick_up(delivery_id, user)
+    delivery = await service.pick_up(delivery_id, user, data.pickup_code)
     return DeliveryOut.model_validate(delivery)
 
 
@@ -266,3 +281,104 @@ async def get_navigation_route(
 ) -> RiderNavigationOut:
     nav = await service.get_rider_navigation(delivery_id, user, lat, lon)
     return RiderNavigationOut(**nav)
+
+
+# Wallet & payouts
+
+@router.get(
+    "/wallet",
+    response_model=RiderWalletOut,
+    status_code=status.HTTP_200_OK,
+    summary="Get rider earnings summary, COD cash in hand, and transaction ledger",
+)
+async def get_rider_wallet(
+    user: RiderUser,
+    service: RiderServiceDep,
+) -> RiderWalletOut:
+    wallet = await service.get_wallet(user)
+    return RiderWalletOut(**wallet)
+
+
+@router.post(
+    "/wallet/withdraw",
+    response_model=RiderWithdrawOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Request M-Pesa B2C payout withdrawal from available rider earnings",
+)
+async def withdraw_rider_wallet(
+    data: RiderWithdrawRequest,
+    user: RiderUser,
+    service: RiderServiceDep,
+) -> RiderWithdrawOut:
+    payout, new_balance = await service.withdraw_wallet(user, data.amount, data.phone)
+    ts = payout.created_at
+    return RiderWithdrawOut(
+        id=payout.id,
+        amount=payout.amount,
+        phone=payout.phone,
+        reference_code=payout.reference_code,
+        status=payout.status,
+        timestamp=ts.strftime("%b %d, %I:%M %p") if ts else "Just now",
+        available_balance=new_balance,
+    )
+
+
+# Rider notifications (pickup codes, dispatch offers, SLA warnings, penalties)
+
+@router.get(
+    "/notifications",
+    response_model=NotificationListOut,
+    status_code=status.HTTP_200_OK,
+    summary="List notifications for the authenticated rider (including store pickup codes)",
+)
+async def get_rider_notifications(
+    user: RiderUser,
+    service: NotificationServiceDep,
+    filter_type: Optional[str] = Query(None),
+) -> NotificationListOut:
+    rows = await service.list_for_user(user.id, filter_type=filter_type, limit=50)
+    items = [
+        NotificationOut(
+            id=str(n.id),
+            title=n.title,
+            message=n.message,
+            type=n.type,
+            created_at=n.created_at.strftime("%Y-%m-%d %H:%M UTC") if n.created_at else "Just now",
+            timestamp=n.created_at,
+            is_read=n.is_read,
+            action_type=n.action_type,
+            action_payload=n.action_payload,
+        )
+        for n in rows
+    ]
+    unread = sum(1 for i in items if not i.is_read)
+    return NotificationListOut(items=items, unread_count=unread, total=len(items))
+
+
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Mark a rider notification as read",
+)
+async def mark_rider_notification_read(
+    notification_id: int,
+    user: RiderUser,
+    service: NotificationServiceDep,
+) -> dict:
+    await service.mark_read(user.id, notification_id)
+    return {"status": "success", "id": str(notification_id), "is_read": True}
+
+
+@router.post(
+    "/notifications/read-all",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Mark all rider notifications as read",
+)
+async def mark_all_rider_notifications_read(
+    user: RiderUser,
+    service: NotificationServiceDep,
+) -> dict:
+    marked = await service.mark_all_read(user.id)
+    return {"status": "success", "marked_read": marked}
