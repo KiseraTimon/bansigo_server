@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import time
 from collections import defaultdict
 
 from .types import Basket, MiningConfig, MiningResult, Rule, DataQuality, CONVICTION_CAP
@@ -25,6 +26,7 @@ class AprioriRecommender:
         )
 
     def mine(self, baskets: list[Basket] | list[set[int]]) -> MiningResult:
+        t_start = time.perf_counter()
         quality = DataQuality(received=len(baskets))
         clean_baskets: list[frozenset[int]] = []
 
@@ -41,6 +43,7 @@ class AprioriRecommender:
         quality.kept = len(clean_baskets)
         n_baskets = len(clean_baskets)
         if n_baskets == 0:
+            total_ms = round((time.perf_counter() - t_start) * 1000.0, 4)
             return MiningResult(
                 config=self.config,
                 rules=[],
@@ -49,7 +52,9 @@ class AprioriRecommender:
                 total_weight=0.0,
                 n_frequent_items=0,
                 n_itemsets=0,
+                timings_ms={"itemset_mining_ms": total_ms, "rule_generation_ms": 0.0, "total_ms": total_ms},
                 itemsets={},
+                diagnostics={"candidates_generated": 0, "candidates_pruned": 0, "db_scans": 0, "itemsets_by_k": {}},
             )
 
         min_count = max(self.config.min_support * n_baskets, self.config.min_support_count)
@@ -59,6 +64,7 @@ class AprioriRecommender:
         for basket in clean_baskets:
             for item in basket:
                 item_counts[item] += 1
+        db_scans = 1
 
         # Popular single items ranked
         popular = sorted(
@@ -78,6 +84,8 @@ class AprioriRecommender:
                 current_l.add(fs)
 
         n_frequent_items = len(current_l)
+        candidates_generated = len(item_counts)
+        candidates_pruned = 0
 
         # 2. Frequent k-itemsets (k >= 2)
         k = 2
@@ -97,9 +105,14 @@ class AprioriRecommender:
                                 break
                         if subsets_ok:
                             candidates.add(union)
+                        else:
+                            candidates_pruned += 1
 
             if not candidates:
                 break
+
+            candidates_generated += len(candidates)
+            db_scans += 1
 
             # Count support for candidates
             candidate_counts: dict[frozenset[int], int] = defaultdict(int)
@@ -117,6 +130,8 @@ class AprioriRecommender:
 
             current_l = next_l
             k += 1
+
+        t_itemsets = time.perf_counter()
 
         # 3. Association rule generation
         rules: list[Rule] = []
@@ -180,6 +195,11 @@ class AprioriRecommender:
                         break
 
         rules.sort(key=lambda r: (r.lift * r.confidence, r.support), reverse=True)
+        t_end = time.perf_counter()
+
+        itemsets_by_k: dict[int, int] = defaultdict(int)
+        for fs in frequent_itemsets:
+            itemsets_by_k[len(fs)] += 1
 
         return MiningResult(
             config=self.config,
@@ -189,5 +209,16 @@ class AprioriRecommender:
             total_weight=float(n_baskets),
             n_frequent_items=n_frequent_items,
             n_itemsets=len(frequent_itemsets),
+            timings_ms={
+                "itemset_mining_ms": round((t_itemsets - t_start) * 1000.0, 4),
+                "rule_generation_ms": round((t_end - t_itemsets) * 1000.0, 4),
+                "total_ms": round((t_end - t_start) * 1000.0, 4),
+            },
             itemsets={tuple(sorted(k)): v for k, v in frequent_itemsets.items()},
+            diagnostics={
+                "candidates_generated": candidates_generated,
+                "candidates_pruned": candidates_pruned,
+                "db_scans": db_scans,
+                "itemsets_by_k": dict(sorted(itemsets_by_k.items())),
+            },
         )
