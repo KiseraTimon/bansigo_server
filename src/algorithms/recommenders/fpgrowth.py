@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import time
 from collections import defaultdict
 from typing import Optional
 
@@ -30,6 +31,7 @@ class FPTree:
         self.root = FPNode(item=None, count=0)
         # item -> [count, head_node]
         self.header_table: dict[int, list] = {}
+        self.node_count: int = 0
 
     def insert_transaction(self, transaction: list[int], count: int = 1) -> None:
         curr = self.root
@@ -39,6 +41,7 @@ class FPTree:
             else:
                 new_node = FPNode(item=item, count=count, parent=curr)
                 curr.children[item] = new_node
+                self.node_count += 1
 
                 # Link in header table
                 if item in self.header_table:
@@ -86,6 +89,7 @@ class FPGrowthRecommender:
         )
 
     def mine(self, baskets: list[Basket] | list[set[int]]) -> MiningResult:
+        t_start = time.perf_counter()
         quality = DataQuality(received=len(baskets))
         clean_baskets: list[list[int]] = []
 
@@ -102,6 +106,7 @@ class FPGrowthRecommender:
         quality.kept = len(clean_baskets)
         n_baskets = len(clean_baskets)
         if n_baskets == 0:
+            total_ms = round((time.perf_counter() - t_start) * 1000.0, 4)
             return MiningResult(
                 config=self.config,
                 rules=[],
@@ -110,7 +115,16 @@ class FPGrowthRecommender:
                 total_weight=0.0,
                 n_frequent_items=0,
                 n_itemsets=0,
+                timings_ms={"itemset_mining_ms": total_ms, "rule_generation_ms": 0.0, "total_ms": total_ms},
                 itemsets={},
+                diagnostics={
+                    "fp_tree_nodes": 0,
+                    "cond_trees_built": 0,
+                    "cond_tree_nodes": 0,
+                    "prefix_paths_extracted": 0,
+                    "db_scans": 0,
+                    "itemsets_by_k": {},
+                },
             )
 
         min_count = max(self.config.min_support * n_baskets, self.config.min_support_count)
@@ -131,6 +145,7 @@ class FPGrowthRecommender:
         n_frequent_items = len(frequent_items)
 
         if not frequent_items:
+            total_ms = round((time.perf_counter() - t_start) * 1000.0, 4)
             return MiningResult(
                 config=self.config,
                 rules=[],
@@ -139,7 +154,16 @@ class FPGrowthRecommender:
                 total_weight=float(n_baskets),
                 n_frequent_items=0,
                 n_itemsets=0,
+                timings_ms={"itemset_mining_ms": total_ms, "rule_generation_ms": 0.0, "total_ms": total_ms},
                 itemsets={},
+                diagnostics={
+                    "fp_tree_nodes": 0,
+                    "cond_trees_built": 0,
+                    "cond_tree_nodes": 0,
+                    "prefix_paths_extracted": 0,
+                    "db_scans": 1,
+                    "itemsets_by_k": {},
+                },
             )
 
         # 2. Build initial FP-Tree
@@ -156,12 +180,16 @@ class FPGrowthRecommender:
 
         # 3. Mine frequent itemsets recursively
         frequent_itemsets: dict[frozenset[int], float] = {}
+        cond_trees_built = 0
+        cond_tree_nodes = 0
+        prefix_paths_extracted = 0
 
         # Frequent 1-itemsets
         for item, count in frequent_items.items():
             frequent_itemsets[frozenset([item])] = count / n_baskets
 
         def _mine_tree(tree: FPTree, prefix: frozenset[int]) -> None:
+            nonlocal cond_trees_built, cond_tree_nodes, prefix_paths_extracted
             if len(prefix) >= self.config.max_itemset_size:
                 return
 
@@ -181,6 +209,7 @@ class FPGrowthRecommender:
 
                 # Build conditional pattern base
                 prefix_paths = tree.find_prefix_paths(item)
+                prefix_paths_extracted += len(prefix_paths)
                 if not prefix_paths:
                     continue
 
@@ -206,9 +235,12 @@ class FPGrowthRecommender:
                     if sorted_path:
                         cond_tree.insert_transaction(sorted_path, count=path_count)
 
+                cond_trees_built += 1
+                cond_tree_nodes += cond_tree.node_count
                 _mine_tree(cond_tree, new_prefix)
 
         _mine_tree(fp_tree, frozenset())
+        t_itemsets = time.perf_counter()
 
         # 4. Association rule generation
         rules: list[Rule] = []
@@ -272,6 +304,11 @@ class FPGrowthRecommender:
                         break
 
         rules.sort(key=lambda r: (r.lift * r.confidence, r.support), reverse=True)
+        t_end = time.perf_counter()
+
+        itemsets_by_k: dict[int, int] = defaultdict(int)
+        for fs in frequent_itemsets:
+            itemsets_by_k[len(fs)] += 1
 
         return MiningResult(
             config=self.config,
@@ -281,5 +318,18 @@ class FPGrowthRecommender:
             total_weight=float(n_baskets),
             n_frequent_items=n_frequent_items,
             n_itemsets=len(frequent_itemsets),
+            timings_ms={
+                "itemset_mining_ms": round((t_itemsets - t_start) * 1000.0, 4),
+                "rule_generation_ms": round((t_end - t_itemsets) * 1000.0, 4),
+                "total_ms": round((t_end - t_start) * 1000.0, 4),
+            },
             itemsets={tuple(sorted(k)): v for k, v in frequent_itemsets.items()},
+            diagnostics={
+                "fp_tree_nodes": fp_tree.node_count,
+                "cond_trees_built": cond_trees_built,
+                "cond_tree_nodes": cond_tree_nodes,
+                "prefix_paths_extracted": prefix_paths_extracted,
+                "db_scans": 2,
+                "itemsets_by_k": dict(sorted(itemsets_by_k.items())),
+            },
         )
