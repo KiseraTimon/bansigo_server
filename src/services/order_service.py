@@ -321,6 +321,29 @@ class OrderService:
         await self.db.commit()
         return await self.orders.get_full(order_id)
 
+    async def mark_completed_pickup(self, order_id: int, actor: User) -> Order:
+        """
+        Completes a Click & Collect (PICKUP) order at the store counter.
+        If the order is Cash on Pickup and not yet marked PAID, settles cash first.
+        """
+        order = await self.get_locked(order_id)
+        if order.fulfilment_type is not FulfilmentType.PICKUP:
+            raise BusinessRuleError("Only Click & Collect pickup orders can be completed at the counter")
+        if order.status is not OrderStatus.READY:
+            raise BusinessRuleError("Order must be packed and READY before customer pickup handover")
+        if order.payment_status is not OrderPaymentStatus.PAID:
+            if order.payment_method is PaymentMethod.CASH:
+                from .payment_service import PaymentService
+                pay_svc = PaymentService(self.db, self.settings)
+                await pay_svc.record_cash(order.id, payable_amount(order), actor)
+                order = await self.get_locked(order_id)
+            else:
+                raise BusinessRuleError("Record the payment before handing the order over")
+
+        await self.advance(order, OrderStatus.COMPLETED, actor_id=actor.id, note="Click & Collect handover completed")
+        await self.db.commit()
+        return await self.orders.get_full(order_id)
+
 
     async def confirm_paid(self, order: Order, *, actor_id: int | None = None) -> Delivery | None:
         """
