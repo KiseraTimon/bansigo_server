@@ -700,9 +700,7 @@ class DeliveryService:
         return await self._complete_pickup(delivery, pickup_code, rider_user.id)
 
     async def verify_store_pickup(self, delivery_id: int, pickup_code: str, operator: User) -> Delivery:
-        delivery = await self.deliveries.get_locked(delivery_id)
-        if delivery is None:
-            raise NotFoundError("Delivery not found")
+        delivery = await self._locked_delivery(delivery_id)
         return await self._complete_pickup(delivery, pickup_code, operator.id)
 
     async def arrive(self, delivery_id: int, rider_user: User) -> Delivery:
