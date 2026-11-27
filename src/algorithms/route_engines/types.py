@@ -31,23 +31,86 @@ def _compass_direction(bearing: float) -> str:
 
 
 def _format_road_label(street_name: Optional[str], highway_type: str) -> str:
-    if street_name and street_name.strip() and street_name.strip().lower() != "none":
+    if street_name and street_name.strip() and street_name.strip().lower() not in ("none", "null"):
         return street_name.strip()
-    cleaned = (highway_type or "road").replace("_", " ").strip().title()
-    return f"{cleaned} Road" if "road" not in cleaned.lower() and "street" not in cleaned.lower() else cleaned
+    tag = (highway_type or "road").lower().strip()
+    mapping = {
+        "trunk": "Main Highway",
+        "trunk_link": "Main Highway",
+        "primary": "Main Highway",
+        "primary_link": "Main Highway",
+        "secondary": "Arterial Road",
+        "secondary_link": "Arterial Road",
+        "tertiary": "Connecting Street",
+        "tertiary_link": "Connecting Street",
+        "residential": "Local Street",
+        "living_street": "Local Street",
+        "unclassified": "Local Street",
+        "service": "Access Lane",
+        "track": "Access Lane",
+    }
+    return mapping.get(tag, "Local Road")
+
+
+def _step_bearing(step: "RouteStep") -> Optional[float]:
+    if len(step.coordinates) >= 2 and step.coordinates[0] != step.coordinates[-1]:
+        return _bearing_deg(step.coordinates[0], step.coordinates[-1])
+    return None
+
+
+def coalesce_route_steps(steps: list["RouteStep"]) -> list["RouteStep"]:
+    """
+    Merges consecutive micro-edges on the same road (or short <25m unnamed connectors)
+    into meaningful navigation legs before generating turn-by-turn instructions.
+    """
+    if len(steps) <= 1:
+        return steps
+
+    merged: list[RouteStep] = [steps[0]]
+    for nxt in steps[1:]:
+        cur = merged[-1]
+        cur_label = _format_road_label(cur.street_name, cur.highway_type)
+        nxt_label = _format_road_label(nxt.street_name, nxt.highway_type)
+        same_named = (
+            cur.street_name
+            and nxt.street_name
+            and cur.street_name.strip().lower() == nxt.street_name.strip().lower()
+        )
+        same_label = cur_label == nxt_label
+
+        b1 = _step_bearing(cur)
+        b2 = _step_bearing(nxt)
+        small_bend = (
+            b1 is not None
+            and b2 is not None
+            and abs((b2 - b1 + 540.0) % 360.0 - 180.0) < 30.0
+        )
+
+        is_tiny_unnamed = (not nxt.street_name) and nxt.distance_m < 25.0
+        if same_named or (same_label and small_bend) or is_tiny_unnamed:
+            combined_coords = list(cur.coordinates)
+            if nxt.coordinates:
+                combined_coords.extend(nxt.coordinates[1:] if combined_coords else nxt.coordinates)
+            cur.to_node = nxt.to_node
+            cur.distance_m += nxt.distance_m
+            cur.duration_s += nxt.duration_s
+            cur.coordinates = combined_coords
+            if not cur.street_name and nxt.street_name:
+                cur.street_name = nxt.street_name
+        else:
+            merged.append(nxt)
+    return merged
 
 
 def populate_turn_instructions(steps: list["RouteStep"]) -> list["RouteStep"]:
-    """Populates human-readable turn-by-turn instructions and maneuver types from edge bearings."""
+    """Coalesces micro-edges and populates human-readable turn-by-turn instructions."""
+    steps[:] = coalesce_route_steps(steps)
     prev_bearing: Optional[float] = None
     for idx, step in enumerate(steps):
         road_label = _format_road_label(step.street_name, step.highway_type)
-        if not step.street_name:
-            step.street_name = road_label
+        step.street_name = road_label
 
-        curr_bearing: Optional[float] = None
-        if len(step.coordinates) >= 2 and step.coordinates[0] != step.coordinates[-1]:
-            curr_bearing = _bearing_deg(step.coordinates[0], step.coordinates[-1])
+        curr_bearing = _step_bearing(step)
 
         if idx == 0 or prev_bearing is None or curr_bearing is None:
             direction = _compass_direction(curr_bearing) if curr_bearing is not None else ""
@@ -56,7 +119,7 @@ def populate_turn_instructions(steps: list["RouteStep"]) -> list["RouteStep"]:
         else:
             delta = (curr_bearing - prev_bearing + 540.0) % 360.0 - 180.0
             abs_d = abs(delta)
-            if abs_d < 20.0:
+            if abs_d < 25.0:
                 step.maneuver_type = "straight"
                 step.instruction = f"Continue on {road_label}"
             elif delta > 0:
