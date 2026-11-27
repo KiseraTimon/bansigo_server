@@ -1,6 +1,7 @@
 # src/algorithms/route_engines/a_star.py
 
 import heapq
+import time
 from typing import Any
 import networkx as nx
 
@@ -41,6 +42,8 @@ class AStarRouter:
         if target_node not in graph:
             raise ValueError(f"Target node {target_node} is not present in graph.")
 
+        t_start = time.perf_counter()
+
         if source_node == target_node:
             node_data = graph.nodes[source_node]
             pt = (float(node_data["y"]), float(node_data["x"]))
@@ -53,14 +56,23 @@ class AStarRouter:
                 node_path=[source_node],
                 coordinates=[pt],
                 steps=[],
+                nodes_visited=1,
+                edges_relaxed=0,
+                pq_pushes=1,
+                pq_pops=1,
+                heuristic_evals=0,
+                execution_time_ms=round((time.perf_counter() - t_start) * 1000.0, 4),
             )
 
         # Precompute target coordinates for fast heuristic evaluations
         target_data = graph.nodes[target_node]
         target_lat = float(target_data["y"])
         target_lon = float(target_data["x"])
+        heuristic_evals = 0
 
         def heuristic(node_id: int) -> float:
+            nonlocal heuristic_evals
+            heuristic_evals += 1
             nd = graph.nodes[node_id]
             h_dist_m = haversine_distance_m(float(nd["y"]), float(nd["x"]), target_lat, target_lon)
             if weight == "distance" or weight == "length":
@@ -71,6 +83,9 @@ class AStarRouter:
         # Priority queue entries: (f_score, g_score, node_id)
         start_h = heuristic(source_node)
         pq: list[tuple[float, float, int]] = [(start_h, 0.0, source_node)]
+        pq_pushes = 1
+        pq_pops = 0
+        edges_relaxed = 0
 
         g_score: dict[int, float] = {source_node: 0.0}
         predecessors: dict[int, tuple[int, dict[str, Any]]] = {}
@@ -80,6 +95,7 @@ class AStarRouter:
 
         while pq:
             current_f, current_g, u = heapq.heappop(pq)
+            pq_pops += 1
 
             if u in visited:
                 continue
@@ -100,6 +116,7 @@ class AStarRouter:
                 if not edges:
                     continue
 
+                edges_relaxed += 1
                 best_edge_data = min(
                     edges.values(),
                     key=lambda d: calculate_edge_weight(d, weight),
@@ -112,6 +129,7 @@ class AStarRouter:
                     predecessors[v] = (u, best_edge_data)
                     f = tentative_g + heuristic(v)
                     heapq.heappush(pq, (f, tentative_g, v))
+                    pq_pushes += 1
 
         if not target_reached:
             raise nx.NetworkXNoPath(f"No path found between node {source_node} and {target_node}.")
@@ -165,6 +183,7 @@ class AStarRouter:
                     all_coords.extend(step_coords[1:])
 
         populate_turn_instructions(steps)
+        exec_ms = round((time.perf_counter() - t_start) * 1000.0, 4)
 
         return RouteResult(
             algorithm=RoutingAlgorithm.A_STAR,
@@ -175,4 +194,10 @@ class AStarRouter:
             node_path=node_path,
             coordinates=all_coords,
             steps=steps,
+            nodes_visited=len(visited),
+            edges_relaxed=edges_relaxed,
+            pq_pushes=pq_pushes,
+            pq_pops=pq_pops,
+            heuristic_evals=heuristic_evals,
+            execution_time_ms=exec_ms,
         )
