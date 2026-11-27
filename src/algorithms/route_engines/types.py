@@ -193,6 +193,12 @@ class RouteResult:
     node_path: list[int]
     coordinates: list[tuple[float, float]]  # (latitude, longitude) sequence
     steps: list[RouteStep] = field(default_factory=list)
+    nodes_visited: int = 0
+    edges_relaxed: int = 0
+    pq_pushes: int = 0
+    pq_pops: int = 0
+    heuristic_evals: int = 0
+    execution_time_ms: float = 0.0
 
     @property
     def estimated_minutes(self) -> int:
@@ -216,6 +222,9 @@ class RouteResult:
                 "duration_s": round(self.total_duration_s, 1),
                 "estimated_minutes": self.estimated_minutes,
                 "node_count": len(self.node_path),
+                "nodes_visited": self.nodes_visited,
+                "edges_relaxed": self.edges_relaxed,
+                "execution_time_ms": round(self.execution_time_ms, 4),
             },
             "geometry": {
                 "type": "LineString",

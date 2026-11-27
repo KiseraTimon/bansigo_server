@@ -1,4 +1,4 @@
-# src/recommender/types.py
+# src/algorithms/recommenders/types.py
 
 """
 shared types for the recommendation engines.
@@ -140,3 +140,4 @@ class MiningResult:
     n_itemsets: int
     timings_ms: dict[str, float] = field(default_factory=dict)
     itemsets: dict[tuple[int, ...], float] | None = None   # product-id space
+    diagnostics: dict[str, Any] = field(default_factory=dict)
