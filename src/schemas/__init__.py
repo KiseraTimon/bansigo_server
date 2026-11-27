@@ -34,6 +34,7 @@ from .review import (
     ReviewCreate, ReviewOut, RiderReviewsSummaryOut,
 )
 from .wishlist import WishlistSyncRequest
+from .simulation import SimulationEventIn, SimulationRunOut
 
 
 __all__ = [
@@ -66,4 +67,5 @@ __all__ = [
     # reviews + wishlist
     "OrderProductReviewItemOut", "OrderReviewStatusOut", "ProductReviewsSummaryOut",
     "ReviewCreate", "ReviewOut", "RiderReviewsSummaryOut", "WishlistSyncRequest",
+    "SimulationEventIn", "SimulationRunOut",
 ]

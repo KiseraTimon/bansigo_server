@@ -16,6 +16,7 @@ from .rider_service import RiderService
 from .user_service import UserService
 from .verification_service import VerificationService
 from .wishlist_service import WishlistService
+from .simulation_service import SimulationService
 
 __all__ = [
     "AddressService",
@@ -34,4 +35,5 @@ __all__ = [
     "UserService",
     "VerificationService",
     "WishlistService",
+    "SimulationService",
 ]

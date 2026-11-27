@@ -35,6 +35,12 @@ from .payment import (
 from .review import Review, ReviewTargetType
 from .recommendation import RecommendationEvent
 from .wishlist import WishlistItem
+from .simulation import (
+    RecommenderAlgorithmComparison,
+    RoutingAlgorithmComparison,
+    SimulationEvent,
+    SimulationRun,
+)
 
 
 # exportable
@@ -49,4 +55,5 @@ __all__ = [
     "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus",
     "DeliveryOfferAction", "DeliveryOfferEvent", "Notification",
     "Review", "ReviewTargetType", "RecommendationEvent", "WishlistItem",
+    "SimulationRun", "SimulationEvent", "RoutingAlgorithmComparison", "RecommenderAlgorithmComparison",
 ]

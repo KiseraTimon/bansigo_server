@@ -10,6 +10,7 @@ from src.routers.server import (
     mpesa_callbacks_router,
     server_auth_router,
     server_profiles_router,
+    staff_router,
 )
 
 # router object
@@ -22,7 +23,9 @@ router.include_router(mpesa_callbacks_router, prefix="/api/payments", tags=["pay
 router.include_router(customer_router, prefix="/api/customer", tags=["customer"])    # customer ops
 router.include_router(rider_router, prefix="/api/rider", tags=["rider"])    # rider ops
 
-# internal/back-office admin console (hidden from schemas, no /api prefix, obfuscated path)
+# internal/back-office admin & staff consoles (hidden from schemas, no /api prefix, obfuscated path)
 settings = get_settings()
 admin_portal_prefix = f"/{settings.admin_portal_path.strip('/')}/admin"
+staff_portal_prefix = f"/{settings.admin_portal_path.strip('/')}/staff"
 router.include_router(admin_router, prefix=admin_portal_prefix, include_in_schema=False)
+router.include_router(staff_router, prefix=staff_portal_prefix, include_in_schema=False)

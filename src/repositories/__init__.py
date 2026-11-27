@@ -16,6 +16,7 @@ from .staff_repository import StaffRepository
 from .token_repository import VerificationTokenRepository
 from .user_repository import UserRepository
 from .wishlist_repository import WishlistRepository
+from .simulation_repository import SimulationRepository
 
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     "UserRepository",
     "VerificationTokenRepository",
     "WishlistRepository",
+    "SimulationRepository",
 ]
