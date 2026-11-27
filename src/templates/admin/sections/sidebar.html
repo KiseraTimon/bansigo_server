@@ -3,26 +3,79 @@
     <!-- Brand Header -->
     <div class="admin-sidebar-header">
         <img src="/static/images/logo.png" alt="Bansi Logo" height="38" class="rounded" onerror="this.style.display='none'">
-        <div>
+        <div class="overflow-hidden">
             <div class="fw-bold fs-5 lh-1 text-danger">Bansi<span class="text-primary">Go</span></div>
-            <div class="text-primary fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.05em;">ADMIN CONSOLE</div>
+            <span class="admin-role-pill mt-1">{{ role_config.badge_label if role_config else 'Admin Console' }}</span>
         </div>
     </div>
 
-    <!-- Navigation List -->
+    <!-- Role-Filtered Navigation List -->
     <div class="admin-sidebar-nav">
-        <div class="nav-section-title">Core Management</div>
+        <div class="nav-section-title">Workspace</div>
         <a class="admin-nav-item active" data-tab="overview">
             <i class="ri-dashboard-3-line"></i>
             <span>Overview</span>
         </a>
+
+        {% if 'orders' in allowed_tabs %}
+        <a class="admin-nav-item" data-tab="orders">
+            <i class="ri-shopping-bag-3-line"></i>
+            <span>Orders &amp; Fulfilment</span>
+            {% if summary and summary.active_orders_count > 0 %}
+                <span class="badge rounded-pill bg-primary" style="font-size: 0.65rem;">{{ summary.active_orders_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+
+        {% if 'dispatch' in allowed_tabs %}
+        <a class="admin-nav-item" data-tab="dispatch">
+            <i class="ri-route-line"></i>
+            <span>Dispatch &amp; Zones</span>
+            {% if summary and (summary.manual_dispatch_count > 0 or summary.overdue_delivery_count > 0) %}
+                <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">{{ summary.manual_dispatch_count + summary.overdue_delivery_count }} Alert</span>
+            {% endif %}
+        </a>
+        {% endif %}
+
+        {% if 'finance' in allowed_tabs %}
+        <a class="admin-nav-item" data-tab="finance">
+            <i class="ri-bank-card-2-line"></i>
+            <span>Finance &amp; Refunds</span>
+            {% if summary and summary.pending_refunds_count > 0 %}
+                <span class="badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">{{ summary.pending_refunds_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+
+        {% if 'products' in allowed_tabs or 'inventory' in allowed_tabs %}
+        <div class="nav-section-title">Catalogue &amp; Stock</div>
+        {% endif %}
+
+        {% if 'products' in allowed_tabs %}
         <a class="admin-nav-item" data-tab="products">
             <i class="ri-store-2-line"></i>
-            <span>Products & Catalogue</span>
+            <span>Products &amp; Catalogue</span>
             {% if summary and summary.low_stock_count > 0 %}
                 <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">{{ summary.low_stock_count }} Low</span>
             {% endif %}
         </a>
+        {% endif %}
+
+        {% if 'inventory' in allowed_tabs %}
+        <a class="admin-nav-item" data-tab="inventory">
+            <i class="ri-stack-line"></i>
+            <span>Inventory &amp; Suppliers</span>
+            {% if summary and summary.out_of_stock_count > 0 %}
+                <span class="badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">{{ summary.out_of_stock_count }} Out</span>
+            {% endif %}
+        </a>
+        {% endif %}
+
+        {% if 'actors' in allowed_tabs or 'reviews' in allowed_tabs or 'audit' in allowed_tabs %}
+        <div class="nav-section-title">People &amp; Quality</div>
+        {% endif %}
+
+        {% if 'actors' in allowed_tabs %}
         <a class="admin-nav-item" data-tab="actors">
             <i class="ri-team-line"></i>
             <span>System Actors</span>
@@ -30,36 +83,38 @@
                 <span class="badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">{{ summary.pending_riders }} Vetting</span>
             {% endif %}
         </a>
-        <a class="admin-nav-item" data-tab="dispatch">
-            <i class="ri-route-line"></i>
-            <span>Dispatch &amp; Deliveries</span>
-            {% if summary and (summary.manual_dispatch_count > 0 or summary.overdue_delivery_count > 0) %}
-                <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">{{ summary.manual_dispatch_count + summary.overdue_delivery_count }} Alert</span>
-            {% endif %}
-        </a>
+        {% endif %}
 
-        <div class="nav-section-title">Operations & Quality</div>
+        {% if 'reviews' in allowed_tabs %}
         <a class="admin-nav-item" data-tab="reviews">
             <i class="ri-star-smile-line"></i>
-            <span>Reviews & Feedback</span>
+            <span>Reviews &amp; Feedback</span>
+            {% if summary and summary.critical_reviews_count > 0 %}
+                <span class="badge rounded-pill bg-danger-subtle text-danger" style="font-size: 0.65rem;">{{ summary.critical_reviews_count }}</span>
+            {% endif %}
         </a>
+        {% endif %}
+
+        {% if 'audit' in allowed_tabs %}
         <a class="admin-nav-item" data-tab="audit">
             <i class="ri-history-line"></i>
             <span>Audit Trail</span>
         </a>
+        {% endif %}
 
-        <div class="nav-section-title">Governance</div>
+        <div class="nav-section-title">Governance &amp; Account</div>
+        {% if 'security' in allowed_tabs %}
         <a class="admin-nav-item" data-tab="security">
             <i class="ri-shield-keyhole-line"></i>
-            <span>Auth & Security</span>
+            <span>Auth &amp; Security</span>
             {% if is_superadmin %}
                 <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem;">Super</span>
             {% else %}
-                <span class="badge rounded-pill bg-secondary" style="font-size: 0.65rem;">Read-only</span>
+                <span class="badge rounded-pill bg-secondary" style="font-size: 0.65rem;">2FA / View</span>
             {% endif %}
         </a>
+        {% endif %}
 
-        <div class="nav-section-title">Personal</div>
         <a class="admin-nav-item" data-tab="account">
             <i class="ri-user-settings-line"></i>
             <span>Account Settings</span>
@@ -68,20 +123,17 @@
 
     <!-- Sidebar Footer / Identity -->
     <div class="admin-sidebar-footer">
-        <a class="text-decoration-none rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
-           onclick="document.querySelector('[data-tab=account]').click()" style="cursor: pointer; width: 36px; height: 36px; background-color: {% if is_superadmin %}#D32F2F{% else %}#1A367E{% endif %}; font-size: 0.85rem;" title="View Account Settings">
+        <a class="text-decoration-none rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm flex-shrink-0"
+           onclick="document.querySelector('[data-tab=account]').click()"
+           style="cursor: pointer; width: 36px; height: 36px; background: var(--role-grad); font-size: 0.85rem;" title="View Account Settings">
             {{ (admin_user.first_name[0] if admin_user and admin_user.first_name else 'A') | upper }}
         </a>
         <div class="flex-grow-1 overflow-hidden" onclick="document.querySelector('[data-tab=account]').click()" style="cursor: pointer;" title="View Account Settings">
             <div class="fw-semibold text-truncate small" style="color: var(--text-heading);">
                 {{ admin_user.first_name if admin_user else 'Admin' }} {{ admin_user.last_name if admin_user else '' }}
             </div>
-            <div class="small text-truncate" style="font-size: 0.72rem;">
-                {% if is_superadmin %}
-                    <span class="badge badge-bansi-red py-0 px-1">Superadmin (Owner)</span>
-                {% else %}
-                    <span class="badge badge-bansi-blue py-0 px-1">Store Admin ({{ admin_level | capitalize }})</span>
-                {% endif %}
+            <div class="small text-truncate" style="font-size: 0.7rem;">
+                <span class="admin-role-pill">{{ admin_level | upper }}</span>
             </div>
         </div>
         <a href="{{ base_url }}/logout" class="btn btn-sm btn-link text-muted p-1 text-decoration-none" title="Sign Out">

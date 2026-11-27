@@ -45,6 +45,15 @@ document.addEventListener('DOMContentLoaded', function () {
     window.location.hash = tabId;
   }
 
+  window.switchAdminTab = function (tabId) {
+    const nav = document.querySelector(`.admin-nav-item[data-tab="${tabId}"]`);
+    if (nav) {
+      nav.click();
+    } else {
+      switchTab(tabId);
+    }
+  };
+
   navItems.forEach(item => {
     item.addEventListener('click', function (e) {
       e.preventDefault();
@@ -966,4 +975,452 @@ document.addEventListener('DOMContentLoaded', function () {
     window.location.hash = 'dispatch';
     window.location.reload();
   };
+
+  window.verifyStorePickup = async function (deliveryId) {
+    const input = document.getElementById(`verifyPickupCode_${deliveryId}`);
+    const code = input ? input.value.trim() : '';
+    if (!code || code.length < 4) {
+      window.showToast('Please enter the 4-digit pickup code presented by the rider.', 'warning');
+      return;
+    }
+    const form = new FormData();
+    form.append('pickup_code', code);
+    const res = await fetch(`${BASE_URL}/deliveries/${deliveryId}/verify-pickup`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      window.showToast(data.detail || 'Pickup verified!', 'success');
+      window.location.hash = 'dispatch';
+      window.location.reload();
+    } else {
+      window.showToast(data.detail || 'Incorrect pickup code.', 'error');
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // 11. Rider Vetting Submission Modal (Documents & Approval)
+  // -------------------------------------------------------------------------
+  window.openRiderSubmissionModal = async function (riderId) {
+    const modalEl = document.getElementById('riderVettingModal');
+    const bodyEl = document.getElementById('rvModalBody');
+    const subEl = document.getElementById('rvModalSubtitle');
+    const actionsEl = document.getElementById('rvModalActions');
+    if (!modalEl || !bodyEl) return;
+
+    bodyEl.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading rider submission...</div>';
+    if (actionsEl) actionsEl.innerHTML = '';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+    try {
+      const res = await fetch(`${BASE_URL}/actors/riders/${riderId}`);
+      if (!res.ok) throw new Error('Could not load rider details');
+      const r = await res.json();
+      if (subEl) subEl.textContent = `${r.name} • ${r.phone} • ${r.vehicle_type.toUpperCase()} (${r.vehicle_plate || 'No Plate'})`;
+
+      const docCard = (title, url) => `
+        <div class="col-md-6">
+          <div class="border rounded-3 p-2 bansi-subtle-box h-100">
+            <div class="small fw-semibold mb-2">${title}</div>
+            ${url ? `<a href="${url}" target="_blank"><img src="${url}" alt="${title}" class="img-fluid rounded border" style="max-height:170px;width:100%;object-fit:cover;" onerror="this.outerHTML='<div class=\\'text-muted small py-3 text-center\\'>Document preview unavailable (${url})</div>'"></a>` : '<div class="text-muted small py-3 text-center">Not uploaded</div>'}
+          </div>
+        </div>`;
+
+      bodyEl.innerHTML = `
+        <div class="row g-3 mb-3 small">
+          <div class="col-md-4"><span class="text-muted d-block">National ID #</span><strong>${r.national_id_number || '-'}</strong></div>
+          <div class="col-md-4"><span class="text-muted d-block">Licence # / Expiry</span><strong>${r.licence_number || '-'} (${r.licence_expiry || 'N/A'})</strong></div>
+          <div class="col-md-4"><span class="text-muted d-block">Status / Rating</span><strong class="text-uppercase">${r.approval_status}</strong> &middot; ★ ${r.rating_average} (${r.rating_count})</div>
+        </div>
+        <div class="row g-3">
+          ${docCard('National ID Front', r.id_card_front_url)}
+          ${docCard('National ID Back', r.id_card_back_url)}
+          ${docCard('Driving Licence', r.driving_licence_url)}
+          ${docCard('Vehicle Proof / Logbook', r.vehicle_proof_url)}
+        </div>`;
+
+      if (actionsEl && (window.ADMIN_LEVEL === 'super' || window.ADMIN_LEVEL === 'operations')) {
+        actionsEl.innerHTML = `
+          ${r.approval_status !== 'approved' ? `<button type="button" class="btn btn-sm btn-success" onclick="vetRiderAction(${r.id}, 'approve', '${r.name.replace(/'/g, "\\'")}')"><i class="ri-check-line me-1"></i>Approve</button>` : ''}
+          ${r.approval_status !== 'suspended' ? `<button type="button" class="btn btn-sm btn-warning" onclick="vetRiderAction(${r.id}, 'suspend', '${r.name.replace(/'/g, "\\'")}')">Suspend</button>` : ''}
+          ${r.approval_status !== 'rejected' ? `<button type="button" class="btn btn-sm btn-outline-danger" onclick="vetRiderAction(${r.id}, 'reject', '${r.name.replace(/'/g, "\\'")}')">Reject</button>` : ''}`;
+      }
+    } catch (err) {
+      bodyEl.innerHTML = `<div class="alert alert-danger small mb-0">${err.message}</div>`;
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // 12. Orders Filtering, Inspection & Picking
+  // -------------------------------------------------------------------------
+  const orderSearchInput = document.getElementById('orderSearchInput');
+  const orderStatusFilter = document.getElementById('orderStatusFilter');
+  function filterOrdersTable() {
+    const q = (orderSearchInput?.value || '').toLowerCase().trim();
+    const st = (orderStatusFilter?.value || '').toLowerCase();
+    document.querySelectorAll('.order-table-row').forEach(row => {
+      const hay = (row.getAttribute('data-search') || '').toLowerCase();
+      const rowSt = (row.getAttribute('data-status') || '').toLowerCase();
+      row.style.display = ((!q || hay.includes(q)) && (!st || rowSt === st)) ? '' : 'none';
+    });
+  }
+  if (orderSearchInput) orderSearchInput.addEventListener('input', filterOrdersTable);
+  if (orderStatusFilter) orderStatusFilter.addEventListener('change', filterOrdersTable);
+
+  window.openOrderDetailModal = async function (orderId) {
+    const modalEl = document.getElementById('orderDetailModal');
+    const bodyEl = document.getElementById('odModalBody');
+    const titleEl = document.getElementById('odModalTitle');
+    const subEl = document.getElementById('odModalSubtitle');
+    const actionsEl = document.getElementById('odModalActions');
+    if (!modalEl || !bodyEl) return;
+
+    bodyEl.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading order...</div>';
+    if (actionsEl) actionsEl.innerHTML = '';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+    try {
+      const res = await fetch(`${BASE_URL}/orders/${orderId}`);
+      if (!res.ok) throw new Error('Failed to load order detail');
+      const o = await res.json();
+      if (titleEl) titleEl.textContent = `Order #${o.order_number}`;
+      if (subEl) subEl.textContent = `${o.customer_name} (${o.recipient_phone}) • ${o.fulfilment_type.toUpperCase()} • ${o.status.toUpperCase()}`;
+
+      const canPick = (window.ADMIN_LEVEL === 'super' || window.ADMIN_LEVEL === 'operations') && o.status === 'preparing';
+      const itemsHtml = (o.items || []).map(it => `
+        <tr>
+          <td><div class="fw-semibold small">${it.product_name}</div><code style="font-size:0.7rem;">${it.sku}</code></td>
+          <td>${it.quantity} ${it.unit}</td>
+          <td>KES ${it.unit_price}</td>
+          <td><span class="badge bansi-subtle-box border text-uppercase">${it.pick_status}</span></td>
+          <td class="text-end">
+            ${canPick && it.pick_status === 'pending' ? `
+              <div class="btn-group btn-group-xs">
+                <button type="button" class="btn btn-xs btn-success" onclick="pickOrderItem(${o.id}, ${it.id}, 'picked', '${it.quantity}')">Picked</button>
+                <button type="button" class="btn btn-xs btn-outline-danger" onclick="pickOrderItem(${o.id}, ${it.id}, 'out_of_stock', '0')">OOS</button>
+              </div>
+            ` : `<span class="small fw-semibold">KES ${it.line_total}</span>`}
+          </td>
+        </tr>`).join('');
+
+      bodyEl.innerHTML = `
+        <div class="row g-3 mb-3 small">
+          <div class="col-md-4"><span class="text-muted d-block">Delivery Address</span><strong>${o.address_text}</strong></div>
+          <div class="col-md-4"><span class="text-muted d-block">Payment</span><strong>${o.payment_method.toUpperCase()} (${o.payment_status.toUpperCase()})</strong></div>
+          <div class="col-md-4"><span class="text-muted d-block">Total (incl. VAT ${o.tax_total})</span><strong class="text-primary">KES ${o.total}</strong></div>
+        </div>
+        ${o.customer_note ? `<div class="alert alert-info py-2 px-3 small mb-3"><strong>Customer Note:</strong> ${o.customer_note}</div>` : ''}
+        <div class="table-responsive mb-3">
+          <table class="table bansi-table table-sm mb-0 align-middle">
+            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Pick Status</th><th class="text-end">Action / Total</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+        </div>
+        <div class="small text-muted">
+          <strong>Timeline:</strong> ${(o.history || []).map(h => `${h.to_status} (${h.created_at})`).join(' &rarr; ')}
+        </div>`;
+
+      if (actionsEl) {
+        let btns = '';
+        if ((window.ADMIN_LEVEL === 'super' || window.ADMIN_LEVEL === 'operations')) {
+          if (o.status === 'confirmed') {
+            btns += `<button type="button" class="btn btn-sm btn-warning" onclick="startOrderPicking(${o.id}, '${o.order_number}')">Start Picking</button>`;
+          } else if (o.status === 'preparing') {
+            btns += `<button type="button" class="btn btn-sm btn-success" onclick="finishOrderPicking(${o.id}, '${o.order_number}')">Finish Picking &amp; Ready</button>`;
+          } else if (o.status === 'ready' && o.fulfilment_type === 'pickup') {
+            btns += `<button type="button" class="btn btn-sm btn-success" onclick="completePickupOrder(${o.id}, '${o.order_number}')">Complete Store Pickup</button>`;
+          }
+        }
+        if ((window.ADMIN_LEVEL === 'super' || window.ADMIN_LEVEL === 'operations' || window.ADMIN_LEVEL === 'support') && !['completed', 'cancelled'].includes(o.status)) {
+          btns += `<button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelOrderByAdmin(${o.id}, '${o.order_number}')">Cancel Order</button>`;
+        }
+        actionsEl.innerHTML = btns;
+      }
+    } catch (err) {
+      bodyEl.innerHTML = `<div class="alert alert-danger small mb-0">${err.message}</div>`;
+    }
+  };
+
+  window.startOrderPicking = async function (orderId, orderNumber) {
+    const res = await fetch(`${BASE_URL}/orders/${orderId}/start-picking`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      window.showToast(data.detail || `Picking started for #${orderNumber}`, 'success');
+      window.openOrderDetailModal(orderId);
+    } else {
+      window.showToast(data.detail || 'Could not start picking', 'error');
+    }
+  };
+
+  window.pickOrderItem = async function (orderId, itemId, pickStatus, qty) {
+    const fd = new FormData();
+    fd.append('pick_status', pickStatus);
+    fd.append('quantity_picked', qty);
+    const res = await fetch(`${BASE_URL}/orders/${orderId}/items/${itemId}/pick`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      window.showToast(data.detail || 'Item picked', 'success');
+      window.openOrderDetailModal(orderId);
+    } else {
+      window.showToast(data.detail || 'Pick failed', 'error');
+    }
+  };
+
+  window.finishOrderPicking = async function (orderId, orderNumber) {
+    const res = await fetch(`${BASE_URL}/orders/${orderId}/finish-picking`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      window.showToast(data.detail || `Order #${orderNumber} packed`, 'success');
+      setTimeout(() => { window.location.hash = 'orders'; window.location.reload(); }, 800);
+    } else {
+      window.showToast(data.detail || 'Could not finish picking', 'error');
+    }
+  };
+
+  window.completePickupOrder = async function (orderId, orderNumber) {
+    const res = await fetch(`${BASE_URL}/orders/${orderId}/complete-pickup`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      window.showToast(data.detail || `Order #${orderNumber} completed`, 'success');
+      setTimeout(() => { window.location.hash = 'orders'; window.location.reload(); }, 800);
+    } else {
+      window.showToast(data.detail || 'Could not complete pickup', 'error');
+    }
+  };
+
+  window.cancelOrderByAdmin = function (orderId, orderNumber) {
+    window.confirmAction({
+      title: `Cancel Order #${orderNumber}`,
+      message: 'Cancel this order, release reserved stock, and trigger a refund request if already paid?',
+      confirmBtnText: 'Cancel Order',
+      confirmBtnClass: 'btn-danger',
+      onConfirm: async () => {
+        const fd = new FormData();
+        fd.append('reason', 'Cancelled by BansiGo Admin Console');
+        const res = await fetch(`${BASE_URL}/orders/${orderId}/cancel`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          window.showToast(data.detail || 'Order cancelled', 'success');
+          setTimeout(() => { window.location.hash = 'orders'; window.location.reload(); }, 800);
+        } else {
+          window.showToast(data.detail || 'Cancellation failed', 'error');
+        }
+      },
+    });
+  };
+
+  // -------------------------------------------------------------------------
+  // 13. Inventory Stock Operations, Suppliers & Delivery Zones
+  // -------------------------------------------------------------------------
+  window.openStockActionModal = function (productId, productName, actionType, currentOnHand) {
+    const modalEl = document.getElementById('stockActionModal');
+    if (!modalEl) return;
+    document.getElementById('stockActionProductId').value = productId;
+    document.getElementById('stockActionType').value = actionType;
+    document.getElementById('stockActionProductInfo').textContent = `${productName} (Current on hand: ${currentOnHand})`;
+
+    const titleMap = { receive: 'Receive Supplier Stock', stock_take: 'Physical Stock Take', write_off: 'Record Wastage / Write-Off' };
+    const labelMap = { receive: 'Quantity Received *', stock_take: 'Counted Quantity on Shelf *', write_off: 'Quantity Written Off *' };
+    document.getElementById('stockActionModalTitle').textContent = titleMap[actionType] || 'Stock Adjustment';
+    document.getElementById('stockQtyLabel').textContent = labelMap[actionType] || 'Quantity *';
+    document.getElementById('stockSupplierGroup').classList.toggle('d-none', actionType !== 'receive');
+    document.getElementById('stockUnitCostGroup').classList.toggle('d-none', actionType !== 'receive');
+    document.getElementById('stockActionQty').value = actionType === 'stock_take' ? currentOnHand : '';
+    document.getElementById('stockActionNote').required = actionType === 'write_off';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  };
+
+  const stockActionForm = document.getElementById('stockActionForm');
+  if (stockActionForm) {
+    stockActionForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const pid = document.getElementById('stockActionProductId').value;
+      const type = document.getElementById('stockActionType').value;
+      const qty = document.getElementById('stockActionQty').value;
+      const note = document.getElementById('stockActionNote').value;
+      const fd = new FormData();
+
+      let endpoint = `${BASE_URL}/inventory/${pid}/receive`;
+      if (type === 'receive') {
+        fd.append('quantity', qty);
+        const supId = document.getElementById('stockActionSupplier')?.value;
+        const unitCost = document.getElementById('stockActionUnitCost')?.value;
+        if (supId) fd.append('supplier_id', supId);
+        if (unitCost) fd.append('unit_cost', unitCost);
+        if (note) fd.append('note', note);
+      } else if (type === 'stock_take') {
+        endpoint = `${BASE_URL}/inventory/${pid}/stock-take`;
+        fd.append('counted', qty);
+        if (note) fd.append('note', note);
+      } else {
+        endpoint = `${BASE_URL}/inventory/${pid}/write-off`;
+        fd.append('quantity', qty);
+        fd.append('note', note || 'Wastage recorded via console');
+      }
+
+      const res = await fetch(endpoint, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        window.showToast(data.detail || 'Inventory updated', 'success');
+        setTimeout(() => { window.location.hash = 'inventory'; window.location.reload(); }, 800);
+      } else {
+        window.showToast(data.detail || 'Inventory update failed', 'error');
+      }
+    });
+  }
+
+  function bindSimpleModalForm(formId, modalId, endpoint, hashTab) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const res = await fetch(endpoint, { method: 'POST', body: new FormData(form) });
+      const data = await res.json();
+      if (res.ok) {
+        window.showToast(data.detail || 'Saved successfully', 'success');
+        bootstrap.Modal.getInstance(document.getElementById(modalId))?.hide();
+        setTimeout(() => { window.location.hash = hashTab; window.location.reload(); }, 800);
+      } else {
+        window.showToast(data.detail || 'Operation failed', 'error');
+      }
+    });
+  }
+
+  window.openCreateSupplierModal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('supplierModal')).show();
+  window.openCreateAdminModal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('createAdminModal')).show();
+  window.openCreateStaffModal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('createStaffModal')).show();
+  window.openCreateZoneModal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('createZoneModal')).show();
+
+  bindSimpleModalForm('supplierForm', 'supplierModal', `${BASE_URL}/suppliers`, 'inventory');
+  bindSimpleModalForm('createAdminForm', 'createAdminModal', `${BASE_URL}/actors/admins`, 'actors');
+  bindSimpleModalForm('createStaffForm', 'createStaffModal', `${BASE_URL}/actors/staff`, 'actors');
+  bindSimpleModalForm('createZoneForm', 'createZoneModal', `${BASE_URL}/dispatch/zones`, 'dispatch');
+
+  window.toggleSupplierStatus = async function (supplierId) {
+    const res = await fetch(`${BASE_URL}/suppliers/${supplierId}/toggle-status`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'Supplier updated', res.ok ? 'success' : 'error');
+    if (res.ok) setTimeout(() => { window.location.hash = 'inventory'; window.location.reload(); }, 700);
+  };
+
+  window.toggleDeliveryZone = async function (zoneId) {
+    const res = await fetch(`${BASE_URL}/dispatch/zones/${zoneId}/toggle-status`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'Zone updated', res.ok ? 'success' : 'error');
+    if (res.ok) setTimeout(() => { window.location.hash = 'dispatch'; window.location.reload(); }, 700);
+  };
+
+  // -------------------------------------------------------------------------
+  // 14. Finance Reconciliation, Maker-Checker Refunds & Reviews Moderation
+  // -------------------------------------------------------------------------
+  window.openManualMpesaModal = function (orderId, orderNumber) {
+    document.getElementById('manualMpesaOrderId').value = orderId;
+    document.getElementById('manualMpesaSubtitle').textContent = `Reconcile unpaid Order #${orderNumber} against confirmed Safaricom M-Pesa receipt.`;
+    document.getElementById('manualMpesaCode').value = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('manualMpesaModal')).show();
+  };
+
+  const manualMpesaForm = document.getElementById('manualMpesaForm');
+  if (manualMpesaForm) {
+    manualMpesaForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const orderId = document.getElementById('manualMpesaOrderId').value;
+      const fd = new FormData();
+      fd.append('transaction_code', document.getElementById('manualMpesaCode').value);
+      const res = await fetch(`${BASE_URL}/finance/orders/${orderId}/confirm-manual`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        window.showToast(data.detail || 'Payment reconciled', 'success');
+        setTimeout(() => { window.location.hash = 'orders'; window.location.reload(); }, 800);
+      } else {
+        window.showToast(data.detail || 'Reconciliation failed', 'error');
+      }
+    });
+  }
+
+  window.openRequestRefundModal = function (paymentId, orderNumber, amount) {
+    document.getElementById('refundPaymentId').value = paymentId;
+    document.getElementById('refundSubtitle').textContent = `Payment #${paymentId} for Order #${orderNumber} (Max KES ${amount}).`;
+    document.getElementById('refundAmount').value = '';
+    document.getElementById('refundReason').value = '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('requestRefundModal')).show();
+  };
+
+  const requestRefundForm = document.getElementById('requestRefundForm');
+  if (requestRefundForm) {
+    requestRefundForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('payment_id', document.getElementById('refundPaymentId').value);
+      const amt = document.getElementById('refundAmount').value;
+      if (amt) fd.append('amount', amt);
+      fd.append('reason', document.getElementById('refundReason').value);
+      const res = await fetch(`${BASE_URL}/finance/refunds`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        window.showToast(data.detail || 'Refund requested', 'success');
+        setTimeout(() => { window.location.hash = 'finance'; window.location.reload(); }, 800);
+      } else {
+        window.showToast(data.detail || 'Refund request failed', 'error');
+      }
+    });
+  }
+
+  window.approveRefundAction = async function (refundId) {
+    const res = await fetch(`${BASE_URL}/finance/refunds/${refundId}/approve`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'Refund approved', res.ok ? 'success' : 'error');
+    if (res.ok) setTimeout(() => { window.location.hash = 'finance'; window.location.reload(); }, 700);
+  };
+
+  window.rejectRefundAction = function (refundId) {
+    window.confirmAction({
+      title: `Reject Refund #RF-${refundId}`,
+      message: 'Reject this refund request? This cannot be undone.',
+      confirmBtnText: 'Reject Refund',
+      confirmBtnClass: 'btn-danger',
+      onConfirm: async () => {
+        const fd = new FormData();
+        fd.append('reason', 'Rejected by Finance Controller');
+        const res = await fetch(`${BASE_URL}/finance/refunds/${refundId}/reject`, { method: 'POST', body: fd });
+        const data = await res.json();
+        window.showToast(data.detail || 'Refund rejected', res.ok ? 'success' : 'error');
+        if (res.ok) setTimeout(() => { window.location.hash = 'finance'; window.location.reload(); }, 700);
+      },
+    });
+  };
+
+  window.settleRefundAction = async function (refundId) {
+    const receipt = `B2C${Date.now().toString().slice(-7)}`;
+    const fd = new FormData();
+    fd.append('receipt', receipt);
+    const res = await fetch(`${BASE_URL}/finance/refunds/${refundId}/settle`, { method: 'POST', body: fd });
+    const data = await res.json();
+    window.showToast(data.detail || 'Refund settled', res.ok ? 'success' : 'error');
+    if (res.ok) setTimeout(() => { window.location.hash = 'finance'; window.location.reload(); }, 700);
+  };
+
+  window.toggleReviewPublish = async function (reviewId) {
+    const res = await fetch(`${BASE_URL}/reviews/${reviewId}/toggle-publish`, { method: 'POST' });
+    const data = await res.json();
+    window.showToast(data.detail || 'Review updated', res.ok ? 'success' : 'error');
+    if (res.ok) setTimeout(() => { window.location.hash = 'reviews'; window.location.reload(); }, 700);
+  };
+
+  const reviewTypeFilter = document.getElementById('reviewTypeFilter');
+  const reviewRatingFilter = document.getElementById('reviewRatingFilter');
+  function filterReviewsGrid() {
+    const typeVal = (reviewTypeFilter?.value || '').toLowerCase();
+    const ratingVal = reviewRatingFilter?.value || '';
+    document.querySelectorAll('.review-card-col').forEach(card => {
+      const t = (card.getAttribute('data-target-type') || '').toLowerCase();
+      const r = parseInt(card.getAttribute('data-rating') || '5', 10);
+      const matchType = !typeVal || t === typeVal;
+      let matchRating = true;
+      if (ratingVal === '5') matchRating = r === 5;
+      else if (ratingVal === '4') matchRating = r === 4;
+      else if (ratingVal === 'critical') matchRating = r <= 3;
+      card.style.display = (matchType && matchRating) ? '' : 'none';
+    });
+  }
+  if (reviewTypeFilter) reviewTypeFilter.addEventListener('change', filterReviewsGrid);
+  if (reviewRatingFilter) reviewRatingFilter.addEventListener('change', filterReviewsGrid);
 });

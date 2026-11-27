@@ -1,158 +1,539 @@
 <!-- src/templates/admin/sections/overview.html -->
 <div class="admin-tab-pane active fade-in" id="overviewTab">
-    <!-- Row 1: KPI Stat Cards -->
-    <div class="row g-4 mb-4">
-        <!-- Revenue Card -->
+    <!-- Role Hero Banner -->
+    <div class="role-hero-banner mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="text-uppercase fw-bold opacity-75" style="font-size: 0.7rem; letter-spacing: 0.08em;">
+                {{ role_config.badge_label if role_config else (admin_level | upper) }} WORKSPACE
+            </div>
+            <h4 class="fw-bold mb-1">{{ role_config.title if role_config else 'BansiGo Console' }}</h4>
+            <div class="small opacity-90">{{ role_config.subtitle if role_config else '' }}</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if admin_level == 'finance' %}
+                <button type="button" class="btn btn-sm btn-light fw-semibold" onclick="switchAdminTab('finance')">
+                    <i class="ri-bank-card-line me-1"></i> Open Treasury Ledger
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('orders')">
+                    <i class="ri-file-list-3-line me-1"></i> Inspect Orders
+                </button>
+            {% elif admin_level == 'inventory' %}
+                <button type="button" class="btn btn-sm btn-light fw-semibold" onclick="openAddProductModal()">
+                    <i class="ri-add-box-line me-1"></i> New Product SKU
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('inventory')">
+                    <i class="ri-stack-line me-1"></i> Stock Movements
+                </button>
+            {% elif admin_level == 'support' %}
+                <button type="button" class="btn btn-sm btn-light fw-semibold" onclick="switchAdminTab('orders')">
+                    <i class="ri-customer-service-2-line me-1"></i> Order Care Queue
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('reviews')">
+                    <i class="ri-chat-check-line me-1"></i> Moderate Reviews
+                </button>
+            {% elif admin_level == 'operations' %}
+                <button type="button" class="btn btn-sm btn-light fw-semibold" onclick="switchAdminTab('orders')">
+                    <i class="ri-shopping-bag-3-line me-1"></i> Pick &amp; Pack Queue
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('dispatch')">
+                    <i class="ri-route-line me-1"></i> Live Dispatch
+                </button>
+            {% else %}
+                <button type="button" class="btn btn-sm btn-light fw-semibold" onclick="switchAdminTab('orders')">
+                    <i class="ri-shopping-bag-3-line me-1"></i> Orders ({{ summary.active_orders_count if summary else 0 }})
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('finance')">
+                    <i class="ri-bank-card-line me-1"></i> Treasury
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="switchAdminTab('dispatch')">
+                    <i class="ri-route-line me-1"></i> Dispatch
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- ROLE-SPECIFIC KPI ROWS                                           -->
+    <!-- ================================================================ -->
+    {% if admin_level == 'finance' %}
+    <!-- FINANCE KPIs -->
+    <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
             <div class="kpi-card">
                 <div>
-                    <div class="kpi-label">Gross Processed Value</div>
-                    <div class="kpi-value text-primary" style="color: var(--bansi-blue) !important;">
-                        KES {{ summary.total_revenue if summary and summary.total_revenue else '0.00' }}
-                    </div>
-                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
-                        {% if summary and summary.total_orders and summary.total_orders > 0 %}
-                            <i class="ri-checkbox-circle-line text-success"></i> Real-time ledger settled
-                        {% else %}
-                            <i class="ri-time-line text-muted"></i> Awaiting completed orders
-                        {% endif %}
-                    </small>
+                    <div class="kpi-label">Settled Gross Revenue</div>
+                    <div class="kpi-value">KES {{ summary.total_revenue if summary else '0.00' }}</div>
+                    <small class="text-muted mt-1 d-block">Today: KES {{ summary.today_revenue if summary else '0.00' }}</small>
                 </div>
-                <div class="kpi-icon-box blue">
-                    <i class="ri-bank-card-line"></i>
-                </div>
+                <div class="kpi-icon-box emerald"><i class="ri-money-dollar-circle-line"></i></div>
             </div>
         </div>
-
-        <!-- Orders Card -->
         <div class="col-xl-3 col-md-6">
             <div class="kpi-card">
                 <div>
-                    <div class="kpi-label">Total Completed Orders</div>
-                    <div class="kpi-value">
-                        {{ summary.total_orders if summary and summary.total_orders is defined else 0 }}
-                    </div>
-                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
-                        {% if summary and summary.total_orders and summary.total_orders > 0 %}
-                            <i class="ri-checkbox-circle-line text-success"></i> 100% fulfilment rate
-                        {% else %}
-                            <i class="ri-information-line text-muted"></i> No orders processed yet
-                        {% endif %}
-                    </small>
+                    <div class="kpi-label">VAT Collected &amp; Pending</div>
+                    <div class="kpi-value">KES {{ summary.total_vat if summary else '0.00' }}</div>
+                    <small class="text-muted mt-1 d-block">Unpaid Orders: KES {{ summary.pending_payment_value if summary else '0.00' }}</small>
                 </div>
-                <div class="kpi-icon-box emerald">
-                    <i class="ri-shopping-cart-line"></i>
-                </div>
+                <div class="kpi-icon-box blue"><i class="ri-percent-line"></i></div>
             </div>
         </div>
-
-        <!-- Active Catalogue SKUs -->
         <div class="col-xl-3 col-md-6">
             <div class="kpi-card">
                 <div>
-                    <div class="kpi-label">Catalogue SKUs</div>
-                    <div class="kpi-value text-danger" style="color: var(--bansi-red) !important;">
-                        {{ summary.total_products if summary and summary.total_products is defined else 0 }}
-                    </div>
-                    <small class="text-muted mt-1 d-block">
-                        {% if summary and summary.low_stock_count and summary.low_stock_count > 0 %}
-                            <span class="badge badge-bansi-red">{{ summary.low_stock_count }} items need restocking</span>
-                        {% elif summary and summary.total_products and summary.total_products > 0 %}
-                            <span class="badge badge-bansi-blue">All items in stock</span>
-                        {% else %}
-                            <span class="text-muted">No items in catalogue</span>
-                        {% endif %}
-                    </small>
+                    <div class="kpi-label">Pending Refunds</div>
+                    <div class="kpi-value text-danger">{{ summary.pending_refunds_count if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">Value: KES {{ summary.pending_refunds_value if summary else '0.00' }}</small>
                 </div>
-                <div class="kpi-icon-box red">
-                    <i class="ri-archive-line"></i>
-                </div>
+                <div class="kpi-icon-box red"><i class="ri-refund-2-line"></i></div>
             </div>
         </div>
-
-        <!-- System Actors Card -->
         <div class="col-xl-3 col-md-6">
             <div class="kpi-card">
                 <div>
-                    <div class="kpi-label">Store Staff & Riders</div>
-                    <div class="kpi-value">
-                        {{ summary.total_staff if summary and summary.total_staff is defined else 0 }} Staff
-                    </div>
-                    <small class="text-muted mt-1 d-block">
-                        <span class="pulse-dot {% if summary and summary.staff_on_duty and summary.staff_on_duty > 0 %}online{% else %}bg-secondary{% endif %}"></span>{{ summary.staff_on_duty if summary and summary.staff_on_duty is defined else 0 }} on shift &middot; {{ summary.total_riders if summary and summary.total_riders is defined else 0 }} riders
-                    </small>
+                    <div class="kpi-label">Rider Payouts &amp; COD</div>
+                    <div class="kpi-value">KES {{ summary.rider_payouts_settled if summary else '0.00' }}</div>
+                    <small class="text-muted mt-1 d-block">COD Today: KES {{ summary.cod_in_hand_today if summary else '0.00' }}</small>
                 </div>
-                <div class="kpi-icon-box amber">
-                    <i class="ri-ebike-2-line"></i>
-                </div>
+                <div class="kpi-icon-box amber"><i class="ri-wallet-3-line"></i></div>
             </div>
         </div>
     </div>
 
-    <!-- Row 2: Action Shortcuts & Low Stock Notice -->
+    {% elif admin_level == 'operations' %}
+    <!-- OPERATIONS KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Active Fulfilment Queue</div>
+                    <div class="kpi-value">{{ summary.active_orders_count if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">Today Placed: {{ summary.today_orders_count if summary else 0 }} orders</small>
+                </div>
+                <div class="kpi-icon-box blue"><i class="ri-shopping-bag-3-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Dispatch &amp; SLA Alerts</div>
+                    <div class="kpi-value text-danger">{{ (summary.manual_dispatch_count + summary.overdue_delivery_count) if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.manual_dispatch_count if summary else 0 }} manual &middot; {{ summary.overdue_delivery_count if summary else 0 }} overdue</small>
+                </div>
+                <div class="kpi-icon-box red"><i class="ri-alarm-warning-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Fleet &amp; Store Shift</div>
+                    <div class="kpi-value">{{ summary.online_riders if summary else 0 }} / {{ summary.total_riders if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.staff_on_duty if summary else 0 }}/{{ summary.total_staff if summary else 0 }} staff on shift &middot; {{ summary.pending_riders if summary else 0 }} vetting</small>
+                </div>
+                <div class="kpi-icon-box emerald"><i class="ri-ebike-2-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Shelf Low-Stock Alerts</div>
+                    <div class="kpi-value">{{ summary.low_stock_count if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.out_of_stock_count if summary else 0 }} out of stock &middot; {{ summary.active_products if summary else 0 }} active SKUs</small>
+                </div>
+                <div class="kpi-icon-box amber"><i class="ri-archive-drawer-line"></i></div>
+            </div>
+        </div>
+    </div>
+
+    {% elif admin_level == 'inventory' %}
+    <!-- INVENTORY KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Active Catalogue SKUs</div>
+                    <div class="kpi-value">{{ summary.active_products if summary else 0 }} <span class="fs-6 text-muted fw-normal">/ {{ summary.total_products if summary else 0 }}</span></div>
+                    <small class="text-muted mt-1 d-block">Today Movements: {{ summary.today_movements if summary else 0 }}</small>
+                </div>
+                <div class="kpi-icon-box amber"><i class="ri-store-2-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Stock Retail Valuation</div>
+                    <div class="kpi-value">KES {{ summary.stock_retail_value if summary else '0.00' }}</div>
+                    <small class="text-muted mt-1 d-block">Cost Basis: KES {{ summary.stock_cost_value if summary else '0.00' }}</small>
+                </div>
+                <div class="kpi-icon-box emerald"><i class="ri-funds-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Restock &amp; Outages</div>
+                    <div class="kpi-value text-danger">{{ summary.low_stock_count if summary else 0 }} Low</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.out_of_stock_count if summary else 0 }} SKUs at zero balance</small>
+                </div>
+                <div class="kpi-icon-box red"><i class="ri-alert-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Active Suppliers</div>
+                    <div class="kpi-value">{{ summary.active_suppliers if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">Direct receiving &amp; GRN tracking</small>
+                </div>
+                <div class="kpi-icon-box blue"><i class="ri-truck-line"></i></div>
+            </div>
+        </div>
+    </div>
+
+    {% elif admin_level == 'support' %}
+    <!-- SUPPORT & CX KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Customer Satisfaction</div>
+                    <div class="kpi-value">{{ reviews.average_rating if reviews and reviews.total_reviews > 0 else 'N/A' }}</div>
+                    <small class="text-muted mt-1 d-block">{{ reviews.total_reviews if reviews else 0 }} reviews &middot; {{ reviews.satisfaction_rate if reviews else 'N/A' }}</small>
+                </div>
+                <div class="kpi-icon-box indigo"><i class="ri-star-smile-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Critical Ratings (&le; 3★)</div>
+                    <div class="kpi-value text-danger">{{ summary.critical_reviews_count if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">Requires customer follow-up</small>
+                </div>
+                <div class="kpi-icon-box red"><i class="ri-chat-delete-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Overdue &amp; Manual Dispatch</div>
+                    <div class="kpi-value">{{ (summary.manual_dispatch_count + summary.overdue_delivery_count) if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.active_deliveries_count if summary else 0 }} active deliveries</small>
+                </div>
+                <div class="kpi-icon-box amber"><i class="ri-timer-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Registered Customers</div>
+                    <div class="kpi-value">{{ summary.total_customers if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">{{ summary.unverified_customers if summary else 0 }} unverified emails</small>
+                </div>
+                <div class="kpi-icon-box emerald"><i class="ri-user-heart-line"></i></div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- SUPERADMIN (EXECUTIVE) KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Gross Processed Value</div>
+                    <div class="kpi-value">KES {{ summary.total_revenue if summary else '0.00' }}</div>
+                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
+                        Today: KES {{ summary.today_revenue if summary else '0.00' }}
+                    </small>
+                </div>
+                <div class="kpi-icon-box blue"><i class="ri-bank-card-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Orders &amp; Fulfilment</div>
+                    <div class="kpi-value">{{ summary.total_orders if summary else 0 }}</div>
+                    <small class="text-muted d-flex align-items-center gap-1 mt-1">
+                        {{ summary.active_orders_count if summary else 0 }} active &middot; {{ summary.today_orders_count if summary else 0 }} today
+                    </small>
+                </div>
+                <div class="kpi-icon-box emerald"><i class="ri-shopping-cart-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Catalogue SKUs</div>
+                    <div class="kpi-value">{{ summary.total_products if summary else 0 }}</div>
+                    <small class="text-muted mt-1 d-block">
+                        {% if summary and summary.low_stock_count > 0 %}
+                            <span class="badge badge-bansi-red">{{ summary.low_stock_count }} low stock</span>
+                        {% else %}
+                            <span>{{ summary.active_products if summary else 0 }} active</span>
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="kpi-icon-box red"><i class="ri-archive-line"></i></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Workforce &amp; Customers</div>
+                    <div class="kpi-value">{{ summary.total_riders if summary else 0 }} Riders &middot; {{ summary.total_staff if summary else 0 }} Staff</div>
+                    <small class="text-muted mt-1 d-block">
+                        <span class="pulse-dot {% if summary and summary.online_riders > 0 %}online{% else %}bg-secondary{% endif %}"></span>{{ summary.online_riders if summary else 0 }} riders online &middot; {{ summary.total_customers if summary else 0 }} shoppers
+                    </small>
+                </div>
+                <div class="kpi-icon-box amber"><i class="ri-team-line"></i></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ================================================================ -->
+    <!-- ROW 2: ROLE-TAILORED ANALYTICS & QUICK WORKFLOWS                 -->
+    <!-- ================================================================ -->
     <div class="row g-4 mb-4">
-        <!-- Quick Action Shortcuts -->
         <div class="col-lg-8">
+            {% if admin_level == 'finance' %}
+            <!-- Finance Payment Channel & Treasury Breakdown -->
             <div class="bansi-card p-4 h-100">
                 <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h6 class="fw-bold mb-0" style="color: var(--text-heading);"><i class="ri-flashlight-line text-warning me-2"></i>Quick Administrative Actions</h6>
+                    <h6 class="fw-bold mb-0" style="color: var(--text-heading);">
+                        <i class="ri-pie-chart-2-line text-success me-2"></i>Settlement Breakdown by Payment Channel
+                    </h6>
+                    <span class="badge bg-success-subtle text-success">Live Ledger</span>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 border bansi-subtle-box">
+                            <div class="small text-muted fw-semibold">M-Pesa STK Push</div>
+                            <div class="fs-5 fw-bold mt-1">KES {{ summary.channel_totals.mpesa_stk if summary else '0.00' }}</div>
+                            <div class="small text-muted">{{ summary.channel_counts.mpesa_stk if summary else 0 }} settled transactions</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 border bansi-subtle-box">
+                            <div class="small text-muted fw-semibold">M-Pesa C2B Paybill</div>
+                            <div class="fs-5 fw-bold mt-1">KES {{ summary.channel_totals.mpesa_c2b if summary else '0.00' }}</div>
+                            <div class="small text-muted">{{ summary.channel_counts.mpesa_c2b if summary else 0 }} direct payments</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 border bansi-subtle-box">
+                            <div class="small text-muted fw-semibold">Cash on Delivery / Pickup</div>
+                            <div class="fs-5 fw-bold mt-1">KES {{ summary.channel_totals.cash if summary else '0.00' }}</div>
+                            <div class="small text-muted">{{ summary.channel_counts.cash if summary else 0 }} cash settlements</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="switchAdminTab('finance')">
+                        <i class="ri-refund-line me-1"></i> Review Refunds ({{ summary.pending_refunds_count if summary else 0 }})
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="switchAdminTab('orders')">
+                        <i class="ri-checkbox-circle-line me-1"></i> Reconcile Unpaid Orders
+                    </button>
+                    <a href="{{ base_url }}/products/export" class="btn btn-sm btn-outline-secondary">
+                        <i class="ri-download-cloud-line me-1"></i> Export SKU Cost &amp; VAT Sheet
+                    </a>
+                </div>
+            </div>
+
+            {% elif admin_level in ['super', 'operations'] %}
+            <!-- Order Lifecycle Pipeline + Quick Actions -->
+            <div class="bansi-card p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="fw-bold mb-0" style="color: var(--text-heading);">
+                        <i class="ri-flow-chart text-primary me-2"></i>Live Order Fulfilment Pipeline
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" onclick="switchAdminTab('orders')">Manage All Orders &rarr;</button>
+                </div>
+                {% set osc = summary.order_status_counts if summary and summary.order_status_counts else {} %}
+                <div class="row g-2 mb-4">
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5">{{ osc.get('pending_payment', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Unpaid</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5 text-primary">{{ osc.get('confirmed', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Confirmed</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5 text-warning">{{ osc.get('preparing', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Picking</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5 text-info">{{ osc.get('ready', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Ready</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5 text-danger">{{ osc.get('out_for_delivery', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">In Transit</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 rounded-3 border text-center bansi-subtle-box">
+                            <div class="fw-bold fs-5 text-success">{{ osc.get('completed', 0) }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Completed</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="row g-3">
                     <div class="col-md-3">
                         <button type="button" class="btn btn-outline-danger w-100 p-3 text-start rounded-3 h-100 border" onclick="openAddProductModal()">
-                            <i class="ri-add-box-line fs-3 d-block mb-1 text-danger"></i>
+                            <i class="ri-add-box-line fs-4 d-block mb-1 text-danger"></i>
                             <div class="fw-bold small">Add New SKU</div>
-                            <div class="text-muted" style="font-size: 0.72rem;">Create product with variants</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Create product &amp; variants</div>
                         </button>
                     </div>
                     <div class="col-md-3">
                         <button type="button" class="btn btn-outline-primary w-100 p-3 text-start rounded-3 h-100 border" onclick="openBulkModal()">
-                            <i class="ri-file-upload-line fs-3 d-block mb-1 text-primary"></i>
-                            <div class="fw-bold small">Bulk CSV Upload</div>
-                            <div class="text-muted" style="font-size: 0.72rem;">Import product spreadsheets</div>
+                            <i class="ri-file-upload-line fs-4 d-block mb-1 text-primary"></i>
+                            <div class="fw-bold small">Bulk Import</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">CSV / Excel workbooks</div>
                         </button>
                     </div>
                     <div class="col-md-3">
-                        <a href="{{ base_url }}/products/export" class="btn btn-outline-secondary w-100 p-3 text-start rounded-3 h-100 border text-decoration-none">
-                            <i class="ri-download-cloud-line fs-3 d-block mb-1 text-secondary"></i>
-                            <div class="fw-bold small">Export Catalog</div>
-                            <div class="text-muted" style="font-size: 0.72rem;">Download full pricing & stock</div>
-                        </a>
+                        <button type="button" class="btn btn-outline-warning w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('actors')">
+                            <i class="ri-user-follow-line fs-4 d-block mb-1 text-warning"></i>
+                            <div class="fw-bold small">Rider Vetting</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">{{ summary.pending_riders if summary else 0 }} pending review</div>
+                        </button>
                     </div>
                     <div class="col-md-3">
-                        <button type="button" class="btn btn-outline-warning w-100 p-3 text-start rounded-3 h-100 border" onclick="document.querySelector('[data-tab=actors]').click()">
-                            <i class="ri-user-follow-line fs-3 d-block mb-1 text-warning"></i>
-                            <div class="fw-bold small">Rider Vetting</div>
-                            <div class="text-muted" style="font-size: 0.72rem;">Approve & review delivery riders</div>
+                        <button type="button" class="btn btn-outline-success w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('inventory')">
+                            <i class="ri-stack-line fs-4 d-block mb-1 text-success"></i>
+                            <div class="fw-bold small">Stock &amp; GRN</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Receive &amp; stock takes</div>
                         </button>
                     </div>
                 </div>
             </div>
+
+            {% elif admin_level == 'inventory' %}
+            <!-- Inventory Quick Actions & Recommendation Engine Performance -->
+            <div class="bansi-card p-4 h-100">
+                <h6 class="fw-bold mb-3" style="color: var(--text-heading);">
+                    <i class="ri-flashlight-line text-warning me-2"></i>Merchandising &amp; Stock Quick Actions
+                </h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-warning w-100 p-3 text-start rounded-3 h-100 border" onclick="openAddProductModal()">
+                            <i class="ri-add-box-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Add New SKU</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Product &amp; size variants</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-primary w-100 p-3 text-start rounded-3 h-100 border" onclick="openBulkModal()">
+                            <i class="ri-file-excel-2-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Bulk Import</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Upload XLSX / CSV</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-success w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('inventory')">
+                            <i class="ri-inbox-archive-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Receive Goods</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Book supplier receipts</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ base_url }}/products/export" class="btn btn-outline-secondary w-100 p-3 text-start rounded-3 h-100 border text-decoration-none">
+                            <i class="ri-download-cloud-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Export Sheet</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Download live catalogue</div>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-3 rounded-3 border bansi-subtle-box d-flex flex-wrap justify-content-between align-items-center gap-2 small">
+                    <div>
+                        <span class="fw-bold">AI Basket Recommenders:</span>
+                        <span class="text-muted ms-1">Apriori ({{ summary.rec_stats.apriori_impressions if summary else 0 }} imp / {{ summary.rec_stats.apriori_clicks if summary else 0 }} clicks) &middot; FP-Growth ({{ summary.rec_stats.fpgrowth_impressions if summary else 0 }} imp / {{ summary.rec_stats.fpgrowth_clicks if summary else 0 }} clicks)</span>
+                    </div>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- Support Quick Actions -->
+            <div class="bansi-card p-4 h-100">
+                <h6 class="fw-bold mb-3" style="color: var(--text-heading);">
+                    <i class="ri-customer-service-2-line text-primary me-2"></i>Customer Care &amp; Resolution Desk
+                </h6>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-primary w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('orders')">
+                            <i class="ri-search-eye-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Order Lookup</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Inspect status &amp; cancel</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-danger w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('dispatch')">
+                            <i class="ri-route-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Delivery SLA</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Reassign stuck riders</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-warning w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('reviews')">
+                            <i class="ri-star-half-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Review Queue</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">{{ summary.critical_reviews_count if summary else 0 }} critical ratings</div>
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-secondary w-100 p-3 text-start rounded-3 h-100 border" onclick="switchAdminTab('actors')">
+                            <i class="ri-user-smile-line fs-4 d-block mb-1"></i>
+                            <div class="fw-bold small">Customer Care</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Verify &amp; manage accounts</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
-        <!-- Store Health & Status -->
+        <!-- System Operational State Card (All Roles) -->
         <div class="col-lg-4">
             <div class="bansi-card p-4 h-100">
-                <h6 class="fw-bold mb-3" style="color: var(--text-heading);"><i class="ri-shield-check-line text-success me-2"></i>System Operational State</h6>
+                <h6 class="fw-bold mb-3" style="color: var(--text-heading);">
+                    <i class="ri-shield-check-line text-success me-2"></i>System Operational Posture
+                </h6>
                 <ul class="list-unstyled mb-0 small">
                     <li class="d-flex justify-content-between py-2 border-bottom">
                         <span class="text-muted">Daraja M-Pesa API</span>
-                        <span class="badge bg-success-subtle text-success fw-semibold">Connected (Sandbox)</span>
+                        <span class="badge bg-success-subtle text-success fw-semibold">{{ security.mpesa_env | capitalize if security else 'Sandbox' }}</span>
                     </li>
                     <li class="d-flex justify-content-between py-2 border-bottom">
-                        <span class="text-muted">Standard VAT Rate</span>
-                        <span class="fw-semibold">{{ security.vat_standard_rate if security else '16.00' }}% Inclusive</span>
+                        <span class="text-muted">Standard VAT / Rider Share</span>
+                        <span class="fw-semibold">{{ security.vat_standard_rate if security else '16.00' }}% / {{ ((security.rider_fee_share | float) * 100) | int if security else 70 }}%</span>
                     </li>
                     <li class="d-flex justify-content-between py-2 border-bottom">
-                        <span class="text-muted">Security Audit Trail</span>
-                        <span class="badge bg-primary-subtle text-primary fw-semibold">Active & Immutable</span>
+                        <span class="text-muted">Unprocessed Callbacks</span>
+                        <span class="badge {% if summary and summary.unprocessed_events_count > 0 %}bg-warning-subtle text-warning-emphasis{% else %}bg-primary-subtle text-primary{% endif %} fw-semibold">
+                            {{ summary.unprocessed_events_count if summary else 0 }} Queued
+                        </span>
                     </li>
                     <li class="d-flex justify-content-between py-2">
                         <span class="text-muted">Customer Satisfaction</span>
                         {% if reviews and reviews.total_reviews and reviews.total_reviews > 0 %}
-                            <span class="text-warning fw-bold"><i class="ri-star-fill"></i> {{ reviews.average_rating }} / 5.0</span>
+                            <span class="text-warning fw-bold"><i class="ri-star-fill"></i> {{ reviews.average_rating }} / 5.0 ({{ reviews.total_reviews }})</span>
                         {% else %}
-                            <span class="text-muted">N/A (No reviews yet)</span>
+                            <span class="text-muted">No reviews yet</span>
                         {% endif %}
                     </li>
                 </ul>
@@ -160,11 +541,15 @@
         </div>
     </div>
 
-    <!-- Row 3: Recent Audit Operations Log -->
+    <!-- Row 3: Role-Scoped Recent Activity Log -->
     <div class="bansi-card p-4">
         <div class="d-flex align-items-center justify-content-between mb-3">
-            <h6 class="fw-bold mb-0" style="color: var(--text-heading);"><i class="ri-history-line text-primary me-2"></i>Recent Administrative Activity</h6>
-            <button type="button" class="btn btn-sm btn-link text-decoration-none small text-primary p-0" onclick="document.querySelector('[data-tab=audit]').click()">View Complete Audit Trail &rarr;</button>
+            <h6 class="fw-bold mb-0" style="color: var(--text-heading);">
+                <i class="ri-history-line text-primary me-2"></i>Recent Administrative Activity
+            </h6>
+            {% if 'audit' in allowed_tabs %}
+                <button type="button" class="btn btn-sm btn-link text-decoration-none small text-primary p-0" onclick="switchAdminTab('audit')">View Complete Audit Trail &rarr;</button>
+            {% endif %}
         </div>
         <div class="table-responsive">
             <table class="table bansi-table mb-0 align-middle">
@@ -174,7 +559,7 @@
                         <th>Action</th>
                         <th>Target Entity</th>
                         <th>Entity ID</th>
-                        <th>Admin User ID</th>
+                        <th>Actor User ID</th>
                         <th>Status</th>
                     </tr>
                 </thead>
@@ -182,11 +567,11 @@
                     {% if summary and summary.recent_audits %}
                         {% for audit in summary.recent_audits %}
                             <tr>
-                                <td class="text-muted small">{{ audit.created_at }}</td>
-                                <td><span class="badge bg-light text-dark border">{{ audit.action }}</span></td>
+                                <td class="text-muted small font-monospace">{{ audit.created_at }}</td>
+                                <td><span class="badge bansi-subtle-box border">{{ audit.action }}</span></td>
                                 <td class="fw-semibold">{{ audit.entity_type | capitalize }}</td>
                                 <td><code>#{{ audit.entity_id }}</code></td>
-                                <td>Admin #{{ audit.actor_id or 'System' }}</td>
+                                <td>{% if audit.actor_id %}Admin #{{ audit.actor_id }}{% else %}System{% endif %}</td>
                                 <td><span class="badge bg-success-subtle text-success">Logged</span></td>
                             </tr>
                         {% endfor %}

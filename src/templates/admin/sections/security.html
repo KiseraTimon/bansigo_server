@@ -15,7 +15,7 @@
                 </span>
             {% else %}
                 <span class="badge bg-secondary-subtle text-secondary px-3 py-2 border">
-                    <i class="ri-lock-line me-1"></i> Read-Only: Operations Admin Scoped
+                    <i class="ri-lock-line me-1"></i> Read-Only: {{ role_config.badge_label if role_config else (admin_level | capitalize) }} Scoped
                 </span>
             {% endif %}
         </div>
@@ -24,13 +24,13 @@
             <div class="alert alert-warning d-flex align-items-center gap-3 p-3 mb-4 rounded-3 border-0" role="alert">
                 <i class="ri-shield-alert-line fs-3 text-warning"></i>
                 <div class="small">
-                    <strong>Owner Security Gate:</strong> System-wide security configurations, M-Pesa settings, and session timeouts can only be altered by business owners (Superadmin level). Store managers may manage their own 2FA credentials and view operational policies below.
+                    <strong>Owner Security Gate:</strong> System-wide security configurations, M-Pesa settings, and session timeouts can only be altered by business owners (Superadmin level). {{ role_config.badge_label if role_config else 'Administrators' }} may manage their own 2FA credentials and view operational policies below.
                 </div>
             </div>
         {% endif %}
 
         <!-- 1. Administrator Two-Factor Authentication (2FA) Module -->
-        <div class="p-4 rounded-3 border mb-4 bg-white shadow-xs">
+        <div class="p-4 rounded-3 border mb-4 bansi-surface-box shadow-xs">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-circle {% if admin_user and admin_user.two_factor_enabled %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %} d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
@@ -130,8 +130,8 @@
 
                 <!-- 4. Shop & Financial Security Parameters -->
                 <div class="col-lg-6">
-                    <div class="p-4 rounded-3 border h-100 bg-white">
-                        <h6 class="fw-bold mb-3 text-dark">
+                    <div class="p-4 rounded-3 border h-100 bansi-surface-box">
+                        <h6 class="fw-bold mb-3" style="color: var(--text-heading);">
                             <i class="ri-money-dollar-circle-line me-2 text-warning"></i>Shop & Financial Policies
                         </h6>
 
@@ -160,7 +160,7 @@
 
                 <!-- 5. M-Pesa Daraja Gateway Posture -->
                 <div class="col-lg-6">
-                    <div class="p-4 rounded-3 border h-100 bg-white">
+                    <div class="p-4 rounded-3 border h-100 bansi-surface-box">
                         <h6 class="fw-bold mb-3 text-success">
                             <i class="ri-smartphone-line me-2"></i>M-Pesa Daraja Gateway Posture
                         </h6>

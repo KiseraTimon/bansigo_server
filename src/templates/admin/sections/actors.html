@@ -1,35 +1,45 @@
 <!-- src/templates/admin/sections/actors.html -->
 <div class="admin-tab-pane fade-in" id="actorsTab">
     <div class="bansi-card p-4">
-        <!-- Section Header -->
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <div>
                 <h5 class="fw-bold mb-1" style="color: var(--text-heading);">System Actors & Workforce</h5>
-                <p class="text-muted small mb-0">Monitor store personnel, dispatch riders, manage customer accounts, and regulate administrative access.</p>
+                <p class="text-muted small mb-0">Monitor store personnel, vet dispatch riders, manage customer accounts, and regulate administrative access.</p>
             </div>
-            <!-- Sub-tab Pills -->
-            <ul class="nav nav-pills" id="actorsSubTabs" role="tablist">
-                <li class="nav-item">
-                    <button class="nav-link active small py-1 px-3" id="riders-pill" data-bs-toggle="pill" data-bs-target="#ridersPillContent" type="button" role="tab">
-                        <i class="ri-ebike-2-line me-1"></i> Delivery Riders ({{ actors.riders|length if actors and actors.riders else '0' }})
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link small py-1 px-3" id="staff-pill" data-bs-toggle="pill" data-bs-target="#staffPillContent" type="button" role="tab">
-                        <i class="ri-user-star-line me-1"></i> Store Staff ({{ actors.staff|length if actors and actors.staff else '0' }})
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link small py-1 px-3" id="admins-pill" data-bs-toggle="pill" data-bs-target="#adminsPillContent" type="button" role="tab">
-                        <i class="ri-shield-user-line me-1"></i> Administrators ({{ actors.admins|length if actors and actors.admins else '0' }})
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link small py-1 px-3" id="customers-pill" data-bs-toggle="pill" data-bs-target="#customersPillContent" type="button" role="tab">
-                        <i class="ri-user-smile-line me-1"></i> Customers ({{ actors.customers|length if actors and actors.customers else '0' }})
-                    </button>
-                </li>
-            </ul>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if admin_level in ['super', 'operations'] %}
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openCreateStaffModal()">
+                    <i class="ri-user-add-line me-1"></i>Add Staff
+                </button>
+                {% endif %}
+                {% if is_superadmin %}
+                <button type="button" class="btn btn-sm btn-bansi-red" onclick="openCreateAdminModal()">
+                    <i class="ri-shield-user-line me-1"></i>Add Admin
+                </button>
+                {% endif %}
+                <ul class="nav nav-pills" id="actorsSubTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active small py-1 px-3" id="riders-pill" data-bs-toggle="pill" data-bs-target="#ridersPillContent" type="button" role="tab">
+                            <i class="ri-ebike-2-line me-1"></i> Riders ({{ actors.riders|length if actors and actors.riders else '0' }})
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1 px-3" id="staff-pill" data-bs-toggle="pill" data-bs-target="#staffPillContent" type="button" role="tab">
+                            <i class="ri-user-star-line me-1"></i> Staff ({{ actors.staff|length if actors and actors.staff else '0' }})
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1 px-3" id="admins-pill" data-bs-toggle="pill" data-bs-target="#adminsPillContent" type="button" role="tab">
+                            <i class="ri-shield-user-line me-1"></i> Admins ({{ actors.admins|length if actors and actors.admins else '0' }})
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1 px-3" id="customers-pill" data-bs-toggle="pill" data-bs-target="#customersPillContent" type="button" role="tab">
+                            <i class="ri-user-smile-line me-1"></i> Customers ({{ actors.customers|length if actors and actors.customers else '0' }})
+                        </button>
+                    </li>
+                </ul>
+            </div>
         </div>
 
         <div class="tab-content" id="actorsTabContent">
@@ -55,13 +65,14 @@
                                     <tr {% if r.approval_status != 'new' %}onclick="openRiderSubmissionModal({{ r.id }})" style="cursor: pointer;" title="Click to view submitted documents"{% endif %}>
                                         <td>
                                             <div class="fw-semibold">{{ r.name }}</div>
-                                            <div class="text-muted" style="font-size: 0.72rem;">ID #RDR-{{ r.id }}</div>
+                                            <div class="text-muted" style="font-size: 0.72rem;">ID #RDR-{{ r.id }} &middot; {{ r.penalty_points }} penalty pts</div>
                                         </td>
                                         <td class="font-monospace small">{{ r.phone }}</td>
-                                        <td><span class="badge bg-light text-dark border">{{ r.vehicle_type | capitalize }}</span></td>
+                                        <td><span class="badge bansi-subtle-box border">{{ r.vehicle_type | capitalize }}</span></td>
                                         <td><code>{{ r.vehicle_plate }}</code></td>
                                         <td>
                                             <span class="text-warning fw-bold small"><i class="ri-star-fill"></i> {{ r.rating_average }}</span>
+                                            <span class="text-muted" style="font-size: 0.7rem;">({{ r.rating_count }})</span>
                                         </td>
                                         <td>{{ r.deliveries_completed }}</td>
                                         <td>
@@ -79,21 +90,23 @@
                                         </td>
                                         <td class="text-end" onclick="event.stopPropagation()">
                                             {% if r.approval_status == 'new' %}
-                                                <span class="text-muted small">—</span>
+                                                <span class="text-muted small">&mdash;</span>
                                             {% else %}
                                                 <div class="btn-group btn-group-sm">
                                                     <button type="button" class="btn btn-outline-primary" onclick="event.stopPropagation(); openRiderSubmissionModal({{ r.id }})" title="View Submission" aria-label="View Submission">
                                                         <i class="ri-eye-line pointer-events-none"></i> Review
                                                     </button>
-                                                    {% if r.approval_status != 'suspended' %}
-                                                        <button type="button" class="btn btn-outline-warning" onclick="vetRiderAction({{ r.id }}, 'suspend', '{{ r.name }}')" title="Suspend Rider" aria-label="Suspend Rider">
-                                                            <i class="ri-pause-circle-line pointer-events-none"></i> Suspend
-                                                        </button>
-                                                    {% endif %}
-                                                    {% if r.approval_status != 'rejected' %}
-                                                        <button type="button" class="btn btn-outline-danger" onclick="vetRiderAction({{ r.id }}, 'reject', '{{ r.name }}')" title="Reject Rider" aria-label="Reject Rider">
-                                                            <i class="ri-close-circle-line pointer-events-none"></i>
-                                                        </button>
+                                                    {% if admin_level in ['super', 'operations'] %}
+                                                        {% if r.approval_status != 'suspended' %}
+                                                            <button type="button" class="btn btn-outline-warning" onclick="vetRiderAction({{ r.id }}, 'suspend', '{{ r.name }}')" title="Suspend Rider" aria-label="Suspend Rider">
+                                                                <i class="ri-pause-circle-line pointer-events-none"></i> Suspend
+                                                            </button>
+                                                        {% endif %}
+                                                        {% if r.approval_status != 'rejected' %}
+                                                            <button type="button" class="btn btn-outline-danger" onclick="vetRiderAction({{ r.id }}, 'reject', '{{ r.name }}')" title="Reject Rider" aria-label="Reject Rider">
+                                                                <i class="ri-close-circle-line pointer-events-none"></i>
+                                                            </button>
+                                                        {% endif %}
                                                     {% endif %}
                                                 </div>
                                             {% endif %}
@@ -125,7 +138,7 @@
                                 <th>Contact</th>
                                 <th>Shift Duty</th>
                                 <th>Hired Date</th>
-                                <th class="text-end">Actions</th>
+                                {% if admin_level in ['super', 'operations'] %}<th class="text-end">Actions</th>{% endif %}
                             </tr>
                         </thead>
                         <tbody>
@@ -147,11 +160,13 @@
                                             {% endif %}
                                         </td>
                                         <td class="small text-muted">{{ s.hired_on }}</td>
+                                        {% if admin_level in ['super', 'operations'] %}
                                         <td class="text-end">
                                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleStaffDutyAction({{ s.id }}, '{{ s.name }}', {{ 'true' if s.is_on_duty else 'false' }})" title="Toggle Shift Duty Status" aria-label="Toggle Shift Duty Status">
                                                 <i class="ri-time-line pointer-events-none"></i> Shift Toggle
                                             </button>
                                         </td>
+                                        {% endif %}
                                     </tr>
                                 {% endfor %}
                             {% else %}
@@ -167,12 +182,12 @@
                 </div>
             </div>
 
-            <!-- 3. Administrators Sub-tab (Superadmin Regulation) -->
+            <!-- 3. Administrators Sub-tab -->
             <div class="tab-pane fade" id="adminsPillContent" role="tabpanel">
-                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 mb-3 border" style="background-color: var(--bg-subtle);">
+                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 mb-3 border bansi-subtle-box">
                     <div>
-                        <div class="fw-bold small text-dark"><i class="ri-shield-keyhole-line text-danger me-1"></i>Administrator Regulation & Governance</div>
-                        <div class="text-muted" style="font-size: 0.75rem;">Superadmins (Business Owners) regulate administrative authority levels across Operations and Finance. Self-modification is restricted for security.</div>
+                        <div class="fw-bold small"><i class="ri-shield-keyhole-line text-danger me-1"></i>Administrator Regulation &amp; Governance</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Superadmins regulate administrative authority levels across Operations, Finance, Inventory, and Support. Self-modification is restricted.</div>
                     </div>
                     {% if not is_superadmin %}
                         <span class="badge bg-warning-subtle text-warning-emphasis small px-2 py-1">
@@ -211,7 +226,13 @@
                                                 {% if a.level == 'super' %}
                                                     <span class="badge badge-bansi-red">SUPERADMIN (OWNER)</span>
                                                 {% elif a.level == 'operations' %}
-                                                    <span class="badge badge-bansi-blue">OPERATIONS (STORE MANAGER)</span>
+                                                    <span class="badge badge-bansi-blue">OPERATIONS</span>
+                                                {% elif a.level == 'finance' %}
+                                                    <span class="badge bg-success-subtle text-success">FINANCE</span>
+                                                {% elif a.level == 'inventory' %}
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis">INVENTORY</span>
+                                                {% elif a.level == 'support' %}
+                                                    <span class="badge bg-primary-subtle text-primary">SUPPORT</span>
                                                 {% else %}
                                                     <span class="badge bg-secondary-subtle text-secondary">{{ a.level | upper }}</span>
                                                 {% endif %}
@@ -227,13 +248,15 @@
                                             {% if is_superadmin %}
                                                 <td class="text-end">
                                                     <div class="d-inline-flex gap-2">
-                                                        <select class="form-select form-select-sm bansi-input py-0 px-2" style="width: 140px; font-size: 0.75rem;"
+                                                        <select class="form-select form-select-sm bansi-input py-0 px-2" style="width: 145px; font-size: 0.75rem;"
                                                                 data-current-level="{{ a.level }}"
                                                                 onchange="changeAdminLevelPrompt(this, {{ a.id }}, '{{ a.name }}')"
                                                                 title="Change Admin Authority Level" aria-label="Change Admin Authority Level">
                                                             <option value="super" {% if a.level == 'super' %}selected{% endif %}>Superadmin</option>
                                                             <option value="operations" {% if a.level == 'operations' %}selected{% endif %}>Operations</option>
                                                             <option value="finance" {% if a.level == 'finance' %}selected{% endif %}>Finance</option>
+                                                            <option value="inventory" {% if a.level == 'inventory' %}selected{% endif %}>Inventory</option>
+                                                            <option value="support" {% if a.level == 'support' %}selected{% endif %}>Support</option>
                                                         </select>
                                                         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
                                                                 onclick="toggleUserStatusAction({{ a.user_id }}, '{{ a.name }}', {{ 'true' if a.is_active else 'false' }}, 'admin')"
@@ -268,7 +291,7 @@
                         <thead>
                             <tr>
                                 <th>Customer</th>
-                                <th>Contact</th>
+                                <th>Contact &amp; Email</th>
                                 <th>Loyalty Points</th>
                                 <th>Tier</th>
                                 <th>Status</th>
@@ -286,15 +309,23 @@
                                                 <div class="fw-semibold">{{ c.name }}</div>
                                                 <div class="text-muted" style="font-size: 0.72rem;">Customer #{{ c.id }}</div>
                                             </td>
-                                            <td class="small">{{ c.phone }}<br><span class="text-muted">{{ c.email }}</span></td>
+                                            <td class="small">
+                                                {{ c.phone }}<br>
+                                                <span class="text-muted">{{ c.email }}</span>
+                                                {% if c.is_verified %}
+                                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.65rem;">Verified</span>
+                                                {% else %}
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis ms-1" style="font-size: 0.65rem;">Unverified</span>
+                                                {% endif %}
+                                            </td>
                                             <td>
-                                                <span class="badge bg-warning-subtle text-dark fw-bold"><i class="ri-coins-line me-1"></i>{{ c.loyalty_points }} pts</span>
+                                                <span class="badge bg-warning-subtle text-warning-emphasis fw-bold"><i class="ri-coins-line me-1"></i>{{ c.loyalty_points }} pts</span>
                                             </td>
                                             <td>
                                                 {% if c.is_premium %}
                                                     <span class="badge badge-bansi-blue">Premium Gold</span>
                                                 {% else %}
-                                                    <span class="badge bg-light text-dark border">Standard</span>
+                                                    <span class="badge bansi-subtle-box border">Standard</span>
                                                 {% endif %}
                                             </td>
                                             <td>

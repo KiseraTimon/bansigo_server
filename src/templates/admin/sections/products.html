@@ -1,27 +1,27 @@
 <!-- src/templates/admin/sections/products.html -->
 <div class="admin-tab-pane fade-in" id="productsTab">
     <div class="bansi-card p-4">
-        <!-- Top Toolbar -->
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <div>
                 <h5 class="fw-bold mb-1" style="color: var(--text-heading);">Catalogue & Variant Inventory</h5>
                 <p class="text-muted small mb-0">Manage retail SKUs, unit sizes, VAT treatment, cost prices, and physical balances.</p>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if admin_level in ['super', 'operations', 'inventory'] %}
                 <button type="button" class="btn btn-sm btn-bansi-red d-flex align-items-center gap-1 shadow-sm" onclick="openAddProductModal()">
                     <i class="ri-add-line fs-6"></i> Add Product
                 </button>
                 <button type="button" class="btn btn-sm btn-bansi-outline-blue d-flex align-items-center gap-1" onclick="openBulkModal()">
                     <i class="ri-file-excel-2-line"></i> Bulk Spreadsheets
                 </button>
+                {% endif %}
                 <a href="{{ base_url }}/products/export" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" title="Download CSV">
                     <i class="ri-download-2-line"></i> Export CSV
                 </a>
             </div>
         </div>
 
-        <!-- Filter & Search Bar -->
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 rounded-3 mb-3 border" style="background-color: var(--bg-subtle);">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 rounded-3 mb-3 border bansi-subtle-box">
             <div class="table-search-box flex-grow-1">
                 <i class="ri-search-line"></i>
                 <input type="text" class="form-control form-control-sm bansi-input w-100" id="productSearchInput" placeholder="Search by name, SKU, or barcode...">
@@ -38,28 +38,27 @@
 
                 <select class="form-select form-select-sm bansi-input" id="stockFilter" style="width: 150px;">
                     <option value="all">All Stock Levels</option>
-                    <option value="in">In Stock (> 0)</option>
+                    <option value="in">In Stock (&gt; 0)</option>
                     <option value="low">Low Stock Alerts</option>
                     <option value="out">Out of Stock (0)</option>
                 </select>
             </div>
         </div>
 
-        <!-- Products Table -->
         <div class="table-responsive">
             <table class="table bansi-table mb-0 align-middle">
                 <thead>
                     <tr>
                         <th style="width: 50px;">Photo</th>
-                        <th>Product & Variant</th>
-                        <th>SKU & Barcode</th>
+                        <th>Product &amp; Variant</th>
+                        <th>SKU &amp; Barcode</th>
                         <th>Category</th>
                         <th>Price (KES)</th>
                         <th>Cost (KES)</th>
                         <th>Tax Class</th>
                         <th>Stock / Reorder</th>
                         <th>Status</th>
-                        <th class="text-end">Actions</th>
+                        {% if admin_level in ['super', 'operations', 'inventory'] %}<th class="text-end">Actions</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody id="productsTableBody">
@@ -95,7 +94,7 @@
                                     <div class="text-muted" style="font-size: 0.72rem;">{{ p.barcode }}</div>
                                 </td>
                                 <td>
-                                    <span class="badge bg-light text-dark border">{{ p.category_name }}</span>
+                                    <span class="badge bansi-subtle-box border">{{ p.category_name }}</span>
                                 </td>
                                 <td>
                                     <div class="fw-bold">{{ p.price }}</div>
@@ -120,6 +119,7 @@
                                         <span class="badge bg-secondary-subtle text-muted border">Inactive</span>
                                     {% endif %}
                                 </td>
+                                {% if admin_level in ['super', 'operations', 'inventory'] %}
                                 <td class="text-end">
                                     <div class="btn-group btn-group-sm">
                                         <button type="button" class="btn btn-outline-secondary" onclick='openEditProductModal({{ p | tojson }})' title="Edit Product" aria-label="Edit Product">
@@ -136,6 +136,7 @@
                                         </button>
                                     </div>
                                 </td>
+                                {% endif %}
                             </tr>
                         {% endfor %}
                     {% else %}
@@ -143,15 +144,17 @@
                             <td colspan="10" class="text-center py-5 text-muted">
                                 <i class="ri-shopping-basket-line fs-2 d-block mb-2 text-muted"></i>
                                 <div class="fw-semibold">No products found in the catalog</div>
-                                <div class="small mb-3 text-secondary">Start building your retail inventory by adding your first product or uploading a CSV spreadsheet.</div>
+                                <div class="small mb-3 text-secondary">Start building your retail inventory by adding your first product or uploading a spreadsheet.</div>
+                                {% if admin_level in ['super', 'operations', 'inventory'] %}
                                 <div class="d-flex justify-content-center gap-2">
                                     <button type="button" class="btn btn-sm btn-danger" onclick="openAddProductModal()">
                                         <i class="ri-add-line me-1"></i> Add Product SKU
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="openBulkModal()">
-                                        <i class="ri-file-upload-line me-1"></i> Bulk CSV Upload
+                                        <i class="ri-file-upload-line me-1"></i> Bulk Upload
                                     </button>
                                 </div>
+                                {% endif %}
                             </td>
                         </tr>
                     {% endif %}
