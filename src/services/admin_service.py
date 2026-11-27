@@ -1453,6 +1453,12 @@ class AdminService:
         estimated_minutes: int,
         actor_id: int,
     ) -> DeliveryZone:
+        existing = (
+            await self.db.execute(select(DeliveryZone).where(func.lower(DeliveryZone.name) == name.strip().lower()))
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(["name"])
+
         zone = DeliveryZone(
             name=name.strip(),
             delivery_fee=delivery_fee,
