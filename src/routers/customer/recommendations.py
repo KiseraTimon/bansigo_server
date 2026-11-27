@@ -2,8 +2,11 @@
 
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db
+from src.dependencies import OptionalUser
+from src.repositories import CustomerRepository
 from src.schemas.recommendation import (
     RecommendationItemOut,
     RecommendationStatsOut,
@@ -11,7 +14,6 @@ from src.schemas.recommendation import (
     RecommendationTrackResponse,
 )
 from src.services.recommendation_service import RecommendationService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/recommendations", tags=["customer-recommendations"])
 
@@ -21,6 +23,7 @@ def get_recommendation_service(db: Annotated[AsyncSession, Depends(get_db)]) -> 
 
 
 RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommendation_service)]
+DbSessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get(
@@ -32,6 +35,7 @@ RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommen
 async def get_recommendations(
     service: RecommendationServiceDep,
     product_id: Optional[int] = Query(None, description="Optional target product ID for cross-sell"),
+    product_ids: Optional[str] = Query(None, description="Optional comma-separated product IDs for cart cross-sell"),
     limit: int = Query(6, ge=1, le=20),
     algorithm: Optional[str] = Query(None, description="Force 'apriori' or 'fpgrowth'; if omitted, server chooses randomly"),
 ) -> list[RecommendationItemOut]:
@@ -40,9 +44,18 @@ async def get_recommendations(
     When algorithm is not specified, the server selects between them randomly
     to evaluate model performance and user acceptance.
     """
-    target_ids = [product_id] if product_id is not None else None
+    target_list: list[int] = []
+    if product_id is not None:
+        target_list.append(product_id)
+    if product_ids:
+        for tok in product_ids.split(","):
+            tok = tok.strip()
+            if tok.isdigit():
+                pid = int(tok)
+                if pid not in target_list:
+                    target_list.append(pid)
     return await service.get_recommendations(
-        target_product_ids=target_ids,
+        target_product_ids=target_list or None,
         limit=limit,
         algorithm=algorithm,
     )
@@ -57,12 +70,17 @@ async def get_recommendations(
 async def track_recommendation(
     data: RecommendationTrackRequest,
     service: RecommendationServiceDep,
+    user: OptionalUser,
+    db: DbSessionDep,
 ) -> RecommendationTrackResponse:
     """
     Tracks recommendation impressions, clicks, cart adds, purchases, and ratings
     to analyze acceptance rate, usability, and algorithmic comparison.
     """
-    return await service.track_event(data)
+    customer = None
+    if user is not None:
+        customer = await CustomerRepository(db).get_by_user_id(user.id)
+    return await service.track_event(data, customer=customer)
 
 
 @router.get(
