@@ -1,6 +1,7 @@
 # src/algorithms/route_engines/dijkstra.py
 
 import heapq
+import time
 from typing import Any, Optional
 import networkx as nx
 from shapely.geometry import LineString
@@ -74,6 +75,8 @@ class DijkstraRouter:
         if target_node not in graph:
             raise ValueError(f"Target node {target_node} is not present in graph.")
 
+        t_start = time.perf_counter()
+
         if source_node == target_node:
             node_data = graph.nodes[source_node]
             pt = (float(node_data["y"]), float(node_data["x"]))
@@ -86,11 +89,20 @@ class DijkstraRouter:
                 node_path=[source_node],
                 coordinates=[pt],
                 steps=[],
+                nodes_visited=1,
+                edges_relaxed=0,
+                pq_pushes=1,
+                pq_pops=1,
+                heuristic_evals=0,
+                execution_time_ms=round((time.perf_counter() - t_start) * 1000.0, 4),
             )
 
         # Min-heap priority queue: entries are (cost, node_id)
         pq: list[tuple[float, int]] = []
         heapq.heappush(pq, (0.0, source_node))
+        pq_pushes = 1
+        pq_pops = 0
+        edges_relaxed = 0
 
         dist: dict[int, float] = {source_node: 0.0}
         predecessors: dict[int, tuple[int, dict[str, Any]]] = {}
@@ -100,6 +112,7 @@ class DijkstraRouter:
 
         while pq:
             current_cost, u = heapq.heappop(pq)
+            pq_pops += 1
 
             if u in visited:
                 continue
@@ -123,6 +136,7 @@ class DijkstraRouter:
                 if not edges:
                     continue
 
+                edges_relaxed += 1
                 best_edge_data = min(
                     edges.values(),
                     key=lambda d: calculate_edge_weight(d, weight),
@@ -134,6 +148,7 @@ class DijkstraRouter:
                     dist[v] = new_cost
                     predecessors[v] = (u, best_edge_data)
                     heapq.heappush(pq, (new_cost, v))
+                    pq_pushes += 1
 
         if not target_reached:
             raise nx.NetworkXNoPath(f"No path found between node {source_node} and {target_node}.")
@@ -188,6 +203,7 @@ class DijkstraRouter:
                     all_coords.extend(step_coords[1:])
 
         populate_turn_instructions(steps)
+        exec_ms = round((time.perf_counter() - t_start) * 1000.0, 4)
 
         return RouteResult(
             algorithm=RoutingAlgorithm.DIJKSTRA,
@@ -198,6 +214,12 @@ class DijkstraRouter:
             node_path=node_path,
             coordinates=all_coords,
             steps=steps,
+            nodes_visited=len(visited),
+            edges_relaxed=edges_relaxed,
+            pq_pushes=pq_pushes,
+            pq_pops=pq_pops,
+            heuristic_evals=0,
+            execution_time_ms=exec_ms,
         )
 
     def find_distances_to_many(
