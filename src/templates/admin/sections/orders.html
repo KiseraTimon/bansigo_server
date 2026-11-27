@@ -1,0 +1,111 @@
+<!-- src/templates/admin/sections/orders.html -->
+<div class="admin-tab-pane fade-in" id="ordersTab">
+    <div class="bansi-card p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">Orders &amp; Fulfilment Operations</h5>
+                <p class="text-muted small mb-0">Inspect customer orders, run shelf picking, verify Click &amp; Collect pickups, and coordinate dispatch.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <div class="table-search-box">
+                    <i class="ri-search-line"></i>
+                    <input type="text" class="form-control form-control-sm bansi-input" id="orderSearchInput" placeholder="Search order #, customer, phone...">
+                </div>
+                <select class="form-select form-select-sm bansi-input" id="orderStatusFilter" style="width: 170px;">
+                    <option value="">All Statuses</option>
+                    <option value="pending_payment">Pending Payment</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="preparing">Preparing</option>
+                    <option value="ready">Ready</option>
+                    <option value="out_for_delivery">Out for Delivery</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table bansi-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Customer &amp; Destination</th>
+                        <th>Items</th>
+                        <th>Total (KES)</th>
+                        <th>Payment</th>
+                        <th>Order Status</th>
+                        <th>Fulfilment / Rider</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if orders_data and orders_data.orders %}
+                        {% for o in orders_data.orders %}
+                            <tr class="order-table-row"
+                                data-search="{{ o.order_number }} {{ o.customer_name }} {{ o.customer_phone }}"
+                                data-status="{{ o.status }}">
+                                <td>
+                                    <div class="fw-bold font-monospace" style="color: var(--role-accent);">#{{ o.order_number }}</div>
+                                    <div class="text-muted" style="font-size: 0.72rem;">{{ o.created_at }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold small">{{ o.customer_name }}</div>
+                                    <div class="text-muted text-truncate" style="font-size: 0.72rem; max-width: 210px;">{{ o.customer_phone }} &middot; {{ o.address_text }}</div>
+                                </td>
+                                <td><span class="badge bansi-subtle-box border">{{ o.item_count }} line(s)</span></td>
+                                <td>
+                                    <div class="fw-bold">{{ o.total }}</div>
+                                    <div class="text-muted" style="font-size: 0.7rem;">VAT {{ o.tax_total }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {% if o.payment_status == 'paid' %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %} text-uppercase">{{ o.payment_status }}</span>
+                                    <div class="text-muted" style="font-size: 0.7rem;">{{ o.payment_method | upper }}{% if o.payment_receipt %} &middot; {{ o.payment_receipt }}{% endif %}</div>
+                                </td>
+                                <td>
+                                    <span class="badge bansi-subtle-box border text-uppercase">{{ o.status | replace('_', ' ') }}</span>
+                                </td>
+                                <td class="small">
+                                    <div class="fw-semibold">{{ o.fulfilment_type | capitalize }}</div>
+                                    {% if o.rider_name %}
+                                        <div class="text-muted" style="font-size: 0.72rem;">{{ o.rider_name }} ({{ o.delivery_status }})</div>
+                                    {% elif o.delivery_status %}
+                                        <div class="text-muted" style="font-size: 0.72rem;">Delivery: {{ o.delivery_status }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary" onclick="openOrderDetailModal({{ o.id }})" title="Inspect &amp; Pick Order">
+                                            <i class="ri-eye-line pointer-events-none"></i> Inspect
+                                        </button>
+                                        {% if admin_level in ['super', 'operations'] and o.status == 'confirmed' %}
+                                            <button type="button" class="btn btn-outline-warning" onclick="startOrderPicking({{ o.id }}, '{{ o.order_number }}')" title="Start Picking">
+                                                <i class="ri-shopping-basket-2-line pointer-events-none"></i> Pick
+                                            </button>
+                                        {% endif %}
+                                        {% if admin_level in ['super', 'operations'] and o.status == 'ready' and o.fulfilment_type == 'pickup' %}
+                                            <button type="button" class="btn btn-outline-success" onclick="completePickupOrder({{ o.id }}, '{{ o.order_number }}')" title="Complete Pickup">
+                                                <i class="ri-check-double-line pointer-events-none"></i> Handover
+                                            </button>
+                                        {% endif %}
+                                        {% if admin_level in ['super', 'finance'] and o.payment_status != 'paid' and o.status != 'cancelled' %}
+                                            <button type="button" class="btn btn-outline-success" onclick="openManualMpesaModal({{ o.id }}, '{{ o.order_number }}')" title="Reconcile M-Pesa Receipt">
+                                                <i class="ri-smartphone-line pointer-events-none"></i> Reconcile
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="ri-shopping-bag-3-line fs-2 d-block mb-2 opacity-50"></i>
+                                No orders recorded in the system yet.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

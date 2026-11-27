@@ -1,0 +1,165 @@
+<!-- src/templates/admin/sections/inventory.html -->
+<div class="admin-tab-pane fade-in" id="inventoryTab">
+    <div class="bansi-card p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-stack-line text-warning me-2"></i>Inventory Control, Stock Movements &amp; Suppliers
+                </h5>
+                <p class="text-muted small mb-0">Receive supplier stock, conduct physical stock takes, record wastage, and audit every unit movement.</p>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openCreateSupplierModal()">
+                    <i class="ri-truck-line me-1"></i> Add Supplier
+                </button>
+                <ul class="nav nav-pills" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active small py-1 px-3" data-bs-toggle="pill" data-bs-target="#invBalancesPill" type="button">
+                            Balances ({{ products|length if products else 0 }})
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1 px-3" data-bs-toggle="pill" data-bs-target="#invMovementsPill" type="button">
+                            Ledger ({{ inventory_data.movements|length if inventory_data and inventory_data.movements else 0 }})
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1 px-3" data-bs-toggle="pill" data-bs-target="#invSuppliersPill" type="button">
+                            Suppliers ({{ inventory_data.suppliers|length if inventory_data and inventory_data.suppliers else 0 }})
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tab-content">
+            <!-- 1. Stock Balances & Direct Actions -->
+            <div class="tab-pane fade show active" id="invBalancesPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>SKU &amp; Product</th>
+                                <th>On Hand</th>
+                                <th>Reserved</th>
+                                <th>Available</th>
+                                <th>Reorder At</th>
+                                <th>Unit Cost</th>
+                                <th class="text-end">Stock Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if products %}
+                                {% for p in products %}
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold small">{{ p.name }}</div>
+                                            <code class="text-muted" style="font-size: 0.72rem;">{{ p.sku }}</code>
+                                        </td>
+                                        <td class="fw-bold">{{ p.quantity_on_hand }}</td>
+                                        <td class="text-muted">{{ p.quantity_reserved }}</td>
+                                        <td>
+                                            <span class="badge {% if (p.available|float) <= 0 %}bg-danger-subtle text-danger{% elif (p.quantity_on_hand|float) <= (p.reorder_level|float) %}bg-warning-subtle text-warning-emphasis{% else %}bg-success-subtle text-success{% endif %}">
+                                                {{ p.available }}
+                                            </span>
+                                        </td>
+                                        <td class="small">{{ p.reorder_level }}</td>
+                                        <td class="font-monospace small">{{ p.cost_price or '-' }}</td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <button type="button" class="btn btn-outline-success" onclick="openStockActionModal({{ p.id }}, '{{ p.name | replace("'", "\\'") }}', 'receive', '{{ p.quantity_on_hand }}')">+ Receive</button>
+                                                <button type="button" class="btn btn-outline-primary" onclick="openStockActionModal({{ p.id }}, '{{ p.name | replace("'", "\\'") }}', 'stock_take', '{{ p.quantity_on_hand }}')">Count</button>
+                                                <button type="button" class="btn btn-outline-danger" onclick="openStockActionModal({{ p.id }}, '{{ p.name | replace("'", "\\'") }}', 'write_off', '{{ p.quantity_on_hand }}')">Wastage</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No inventory records available.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. Stock Movements Ledger -->
+            <div class="tab-pane fade" id="invMovementsPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Product</th>
+                                <th>Type</th>
+                                <th>Change</th>
+                                <th>Balance After</th>
+                                <th>Supplier / Ref</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if inventory_data and inventory_data.movements %}
+                                {% for m in inventory_data.movements %}
+                                    <tr>
+                                        <td class="small text-muted font-monospace">{{ m.created_at }}</td>
+                                        <td>
+                                            <div class="fw-semibold small">{{ m.product_name }}</div>
+                                            <code style="font-size: 0.7rem;">{{ m.sku }}</code>
+                                        </td>
+                                        <td><span class="badge bansi-subtle-box border text-uppercase">{{ m.movement_type }}</span></td>
+                                        <td class="fw-bold font-monospace {% if (m.quantity_change|float) > 0 %}text-success{% else %}text-danger{% endif %}">{{ m.quantity_change }}</td>
+                                        <td class="font-monospace">{{ m.quantity_after }}</td>
+                                        <td class="small">{{ m.supplier_name if m.supplier_name != '-' else m.reference }}</td>
+                                        <td class="small text-muted">{{ m.note }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No stock movements recorded yet.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. Suppliers Directory -->
+            <div class="tab-pane fade" id="invSuppliersPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Supplier Name</th>
+                                <th>Contact</th>
+                                <th>Phone &amp; Email</th>
+                                <th>KRA PIN</th>
+                                <th>Terms</th>
+                                <th>Status</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if inventory_data and inventory_data.suppliers %}
+                                {% for s in inventory_data.suppliers %}
+                                    <tr>
+                                        <td class="fw-semibold">{{ s.name }}</td>
+                                        <td class="small">{{ s.contact_name }}</td>
+                                        <td class="small">{{ s.phone }}<br><span class="text-muted">{{ s.email }}</span></td>
+                                        <td><code>{{ s.kra_pin }}</code></td>
+                                        <td class="small">{{ s.payment_terms_days }} days</td>
+                                        <td>
+                                            {% if s.is_active %}<span class="badge bg-success-subtle text-success">Active</span>{% else %}<span class="badge bg-secondary-subtle text-muted">Inactive</span>{% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSupplierStatus({{ s.id }})">Toggle</button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No suppliers registered yet. Click &ldquo;Add Supplier&rdquo; above.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

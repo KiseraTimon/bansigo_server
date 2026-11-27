@@ -1,0 +1,202 @@
+<!-- src/templates/admin/sections/finance.html -->
+<div class="admin-tab-pane fade-in" id="financeTab">
+    <div class="bansi-card p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h5 class="fw-bold mb-1" style="color: var(--text-heading);">
+                    <i class="ri-bank-card-2-line text-success me-2"></i>Finance, Payments &amp; Refunds Treasury
+                </h5>
+                <p class="text-muted small mb-0">Reconcile M-Pesa STK/C2B transactions, inspect Daraja callbacks, enforce maker-checker refunds, and audit rider payouts.</p>
+            </div>
+            <ul class="nav nav-pills" id="financeSubTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active small py-1 px-3" data-bs-toggle="pill" data-bs-target="#finPaymentsPill" type="button">
+                        Payments ({{ finance_data.payments|length if finance_data and finance_data.payments else 0 }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" data-bs-toggle="pill" data-bs-target="#finRefundsPill" type="button">
+                        Refunds ({{ finance_data.refunds|length if finance_data and finance_data.refunds else 0 }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" data-bs-toggle="pill" data-bs-target="#finEventsPill" type="button">
+                        Daraja Events ({{ finance_data.payment_events|length if finance_data and finance_data.payment_events else 0 }})
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link small py-1 px-3" data-bs-toggle="pill" data-bs-target="#finPayoutsPill" type="button">
+                        Rider Payouts ({{ finance_data.rider_payouts|length if finance_data and finance_data.rider_payouts else 0 }})
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="tab-content">
+            <!-- 1. Payments Ledger -->
+            <div class="tab-pane fade show active" id="finPaymentsPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Payment ID</th>
+                                <th>Order #</th>
+                                <th>Channel</th>
+                                <th>Amount (KES)</th>
+                                <th>Phone</th>
+                                <th>Receipt</th>
+                                <th>Status</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if finance_data and finance_data.payments %}
+                                {% for p in finance_data.payments %}
+                                    <tr>
+                                        <td class="font-monospace small">#{{ p.id }}</td>
+                                        <td><code class="fw-bold">#{{ p.order_number }}</code></td>
+                                        <td><span class="badge bansi-subtle-box border text-uppercase">{{ p.channel }}</span></td>
+                                        <td class="fw-bold">{{ p.amount }}</td>
+                                        <td class="small font-monospace">{{ p.payer_phone }}</td>
+                                        <td><code>{{ p.provider_receipt }}</code></td>
+                                        <td>
+                                            <span class="badge {% if p.status == 'succeeded' %}bg-success-subtle text-success{% elif p.status in ['pending', 'initiated'] %}bg-warning-subtle text-warning-emphasis{% else %}bg-danger-subtle text-danger{% endif %} text-uppercase">{{ p.status }}</span>
+                                        </td>
+                                        <td class="text-end">
+                                            {% if p.status == 'succeeded' %}
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="openRequestRefundModal({{ p.id }}, '{{ p.order_number }}', '{{ p.amount }}')">
+                                                    <i class="ri-refund-line me-1"></i> Request Refund
+                                                </button>
+                                            {% else %}
+                                                <span class="text-muted small">{{ p.created_at }}</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="8" class="text-center py-4 text-muted">No payments recorded yet.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2. Refunds Maker-Checker Queue -->
+            <div class="tab-pane fade" id="finRefundsPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Refund</th>
+                                <th>Order #</th>
+                                <th>Amount (KES)</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>B2C Receipt</th>
+                                <th class="text-end">Maker-Checker Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if finance_data and finance_data.refunds %}
+                                {% for rf in finance_data.refunds %}
+                                    <tr>
+                                        <td class="font-monospace small">#RF-{{ rf.id }}</td>
+                                        <td><code>#{{ rf.order_number }}</code></td>
+                                        <td class="fw-bold text-danger">{{ rf.amount }}</td>
+                                        <td class="small">{{ rf.reason }}</td>
+                                        <td><span class="badge bansi-subtle-box border text-uppercase">{{ rf.status }}</span></td>
+                                        <td><code>{{ rf.provider_receipt }}</code></td>
+                                        <td class="text-end">
+                                            {% if rf.status == 'requested' %}
+                                                <div class="btn-group btn-group-sm">
+                                                    <button type="button" class="btn btn-outline-success" onclick="approveRefundAction({{ rf.id }})" {% if rf.requested_by == current_admin_user_id %}disabled title="Maker-checker: cannot approve your own refund"{% endif %}>Approve</button>
+                                                    <button type="button" class="btn btn-outline-danger" onclick="rejectRefundAction({{ rf.id }})">Reject</button>
+                                                </div>
+                                            {% elif rf.status == 'approved' %}
+                                                <button type="button" class="btn btn-sm btn-success" onclick="settleRefundAction({{ rf.id }})">Settle B2C Receipt</button>
+                                            {% else %}
+                                                <span class="text-muted small">{{ rf.created_at }}</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No refund requests recorded.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. Daraja Webhook Events -->
+            <div class="tab-pane fade" id="finEventsPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Event ID</th>
+                                <th>Source</th>
+                                <th>External Reference</th>
+                                <th>Authentic</th>
+                                <th>Processed</th>
+                                <th>Notes / Error</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if finance_data and finance_data.payment_events %}
+                                {% for ev in finance_data.payment_events %}
+                                    <tr>
+                                        <td>#{{ ev.id }}</td>
+                                        <td><span class="badge bansi-subtle-box border text-uppercase">{{ ev.source }}</span></td>
+                                        <td class="font-monospace small">{{ ev.external_id }}</td>
+                                        <td>
+                                            {% if ev.is_authentic %}<span class="badge bg-success-subtle text-success">Verified</span>{% else %}<span class="badge bg-warning-subtle text-warning-emphasis">Unverified</span>{% endif %}
+                                        </td>
+                                        <td class="small">{{ ev.processed_at or 'Pending' }}</td>
+                                        <td class="small text-muted">{{ ev.processing_error or '-' }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="6" class="text-center py-4 text-muted">No Daraja callback events logged yet.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Rider Payouts -->
+            <div class="tab-pane fade" id="finPayoutsPill">
+                <div class="table-responsive">
+                    <table class="table bansi-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Rider</th>
+                                <th>Destination Phone</th>
+                                <th>Amount (KES)</th>
+                                <th>Status</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if finance_data and finance_data.rider_payouts %}
+                                {% for po in finance_data.rider_payouts %}
+                                    <tr>
+                                        <td><code>{{ po.reference_code }}</code></td>
+                                        <td class="fw-semibold">{{ po.rider_name }}</td>
+                                        <td class="font-monospace small">{{ po.phone }}</td>
+                                        <td class="fw-bold text-success">{{ po.amount }}</td>
+                                        <td><span class="badge bg-success-subtle text-success">{{ po.status }}</span></td>
+                                        <td class="small text-muted">{{ po.created_at }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="6" class="text-center py-4 text-muted">No rider B2C payouts requested yet.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

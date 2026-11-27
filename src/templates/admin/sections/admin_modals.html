@@ -1,0 +1,314 @@
+<!-- src/templates/admin/sections/admin_modals.html -->
+
+<!-- 1. Order Inspection & Shelf Picking Modal -->
+<div class="modal fade" id="orderDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="odModalTitle">Order Inspection</h5>
+                    <div class="small text-muted" id="odModalSubtitle">Loading order details...</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="odModalBody">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div> Loading order...
+                </div>
+            </div>
+            <div class="modal-footer border-top bansi-subtle-box d-flex justify-content-between" id="odModalFooter">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="d-flex gap-2" id="odModalActions"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. Inventory Stock Action Modal (Receive / Stock Take / Write-Off) -->
+<div class="modal fade" id="stockActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0" id="stockActionModalTitle">Stock Adjustment</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="stockActionForm">
+                <input type="hidden" id="stockActionProductId">
+                <input type="hidden" id="stockActionType">
+                <div class="modal-body p-4">
+                    <div class="mb-3 small text-muted" id="stockActionProductInfo"></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" id="stockQtyLabel" for="stockActionQty">Quantity *</label>
+                        <input type="number" step="0.001" min="0" class="form-control bansi-input" id="stockActionQty" required>
+                    </div>
+                    <div class="mb-3 d-none" id="stockSupplierGroup">
+                        <label class="form-label small fw-semibold" for="stockActionSupplier">Supplier (Optional)</label>
+                        <select class="form-select bansi-input" id="stockActionSupplier">
+                            <option value="">-- Direct / Unspecified --</option>
+                            {% if inventory_data and inventory_data.suppliers %}
+                                {% for s in inventory_data.suppliers %}
+                                    {% if s.is_active %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="mb-3 d-none" id="stockUnitCostGroup">
+                        <label class="form-label small fw-semibold" for="stockActionUnitCost">Unit Cost (KES, Optional)</label>
+                        <input type="number" step="0.01" min="0" class="form-control bansi-input" id="stockActionUnitCost">
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small fw-semibold" for="stockActionNote">Audit Note / Reason</label>
+                        <input type="text" class="form-control bansi-input" id="stockActionNote" placeholder="e.g. GRN #401, Expiry write-off, Cycle count">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-bansi-red px-3" id="stockActionSubmitBtn">Apply Stock Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 3. Create Supplier Modal -->
+<div class="modal fade" id="supplierModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-truck-line text-primary me-1"></i>Add Retail Supplier</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="supplierForm">
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Supplier Name *</label>
+                        <input type="text" class="form-control bansi-input" name="name" required placeholder="e.g. Brookside Dairy Ltd">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Contact Person</label>
+                        <input type="text" class="form-control bansi-input" name="contact_name" placeholder="Account rep">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone</label>
+                        <input type="text" class="form-control bansi-input" name="phone" placeholder="+254...">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Email</label>
+                        <input type="email" class="form-control bansi-input" name="email" placeholder="orders@supplier.co.ke">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">KRA PIN</label>
+                        <input type="text" class="form-control bansi-input font-monospace text-uppercase" name="kra_pin" placeholder="P051...">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Payment Terms (Days)</label>
+                        <input type="number" min="0" class="form-control bansi-input" name="payment_terms_days" value="30">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-bansi-blue px-3">Save Supplier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 4. Create Administrator Modal (Superadmin Only) -->
+<div class="modal fade" id="createAdminModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 500px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-shield-user-line text-danger me-1"></i>Provision Administrator</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createAdminForm">
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">First Name *</label>
+                        <input type="text" class="form-control bansi-input" name="first_name" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Last Name *</label>
+                        <input type="text" class="form-control bansi-input" name="last_name" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Username *</label>
+                        <input type="text" class="form-control bansi-input font-monospace" name="username" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Authority Role *</label>
+                        <select class="form-select bansi-input" name="level" required>
+                            <option value="operations">Operations Manager</option>
+                            <option value="finance">Finance Controller</option>
+                            <option value="inventory">Inventory Manager</option>
+                            <option value="support">Support Lead</option>
+                            <option value="super">Superadmin (Owner)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Email *</label>
+                        <input type="email" class="form-control bansi-input" name="email" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone *</label>
+                        <input type="text" class="form-control bansi-input" name="phone" required placeholder="+2547...">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Temporary Password (min 8 chars) *</label>
+                        <input type="password" class="form-control bansi-input" name="password" minlength="8" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-bansi-red px-3">Create Administrator</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 5. Create Store Staff Modal -->
+<div class="modal fade" id="createStaffModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 500px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-user-add-line text-primary me-1"></i>Onboard Store Staff</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createStaffForm">
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">First Name *</label>
+                        <input type="text" class="form-control bansi-input" name="first_name" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Last Name *</label>
+                        <input type="text" class="form-control bansi-input" name="last_name" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Employee # *</label>
+                        <input type="text" class="form-control bansi-input font-monospace text-uppercase" name="employee_number" required placeholder="EMP-001">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Position *</label>
+                        <select class="form-select bansi-input" name="position" required>
+                            {% for pos in staff_positions or ['picker', 'cashier', 'stock_clerk', 'dispatcher', 'support', 'store_manager'] %}
+                                <option value="{{ pos }}">{{ pos | replace('_', ' ') | title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Username *</label>
+                        <input type="text" class="form-control bansi-input font-monospace" name="username" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phone *</label>
+                        <input type="text" class="form-control bansi-input" name="phone" required placeholder="+2547...">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Email *</label>
+                        <input type="email" class="form-control bansi-input" name="email" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Password (min 8 chars) *</label>
+                        <input type="password" class="form-control bansi-input" name="password" minlength="8" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-bansi-blue px-3">Create Staff Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 6. Create Delivery Zone Modal -->
+<div class="modal fade" id="createZoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-map-pin-add-line text-danger me-1"></i>Add Delivery Zone</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createZoneForm">
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold">Zone Name *</label>
+                        <input type="text" class="form-control bansi-input" name="name" required placeholder="e.g. Marindi &amp; Nyabisawa">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Fee (KES) *</label>
+                        <input type="number" step="1" min="0" class="form-control bansi-input" name="delivery_fee" value="80" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Min Order</label>
+                        <input type="number" step="1" min="0" class="form-control bansi-input" name="min_order_amount" value="150">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">ETA (Mins)</label>
+                        <input type="number" min="5" class="form-control bansi-input" name="estimated_minutes" value="30">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-bansi-red px-3">Save Zone</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 7. Manual M-Pesa Reconciliation & Refund Request Modals -->
+<div class="modal fade" id="manualMpesaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-smartphone-line text-success me-1"></i>Reconcile M-Pesa Receipt</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="manualMpesaForm">
+                <input type="hidden" id="manualMpesaOrderId">
+                <div class="modal-body p-4">
+                    <div class="small text-muted mb-3" id="manualMpesaSubtitle"></div>
+                    <label class="form-label small fw-semibold">M-Pesa Transaction Receipt Code *</label>
+                    <input type="text" class="form-control bansi-input font-monospace text-uppercase" id="manualMpesaCode" required placeholder="e.g. SLK8239XYZ">
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-success px-3">Confirm Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="requestRefundModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content bansi-card border-0 shadow-lg">
+            <div class="modal-header border-bottom bansi-subtle-box">
+                <h6 class="modal-title fw-bold mb-0"><i class="ri-refund-2-line text-danger me-1"></i>Stage Refund Request</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="requestRefundForm">
+                <input type="hidden" id="refundPaymentId">
+                <div class="modal-body p-4">
+                    <div class="small text-muted mb-3" id="refundSubtitle"></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Refund Amount (KES, blank = full remaining)</label>
+                        <input type="number" step="0.01" min="1" class="form-control bansi-input" id="refundAmount">
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small fw-semibold">Reason *</label>
+                        <input type="text" class="form-control bansi-input" id="refundReason" required placeholder="e.g. Damaged item, cancelled order">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-3">Submit for Approval</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
