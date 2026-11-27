@@ -266,3 +266,83 @@ class RoadNetworkRouter:
             return best_rider, best_rider_route, store_to_customer
 
         return None
+
+    def compare_algorithms(
+        self,
+        source_lat: float,
+        source_lon: float,
+        target_lat: float,
+        target_lon: float,
+        *,
+        weight: str = "travel_time",
+        selected: Optional[RoutingAlgorithm | str] = None,
+    ) -> dict:
+        """
+        Executes a head-to-head comparison between Dijkstra and A* on the exact same
+        origin-destination vertex pair, alternating execution order to prevent CPU cache bias.
+        """
+        from collections import defaultdict
+
+        source_node, _ = self.spatial_index.find_nearest_node(source_lat, source_lon)
+        target_node, _ = self.spatial_index.find_nearest_node(target_lat, target_lon)
+        straight_m = haversine_distance_m(source_lat, source_lon, target_lat, target_lon)
+
+        if random.random() < 0.5:
+            d_res = self.dijkstra.find_route(self.graph, source_node, target_node, weight=weight)
+            a_res = self.astar.find_route(self.graph, source_node, target_node, weight=weight)
+        else:
+            a_res = self.astar.find_route(self.graph, source_node, target_node, weight=weight)
+            d_res = self.dijkstra.find_route(self.graph, source_node, target_node, weight=weight)
+
+        if selected is None:
+            chosen = random.choice([RoutingAlgorithm.DIJKSTRA.value, RoutingAlgorithm.A_STAR.value])
+        elif isinstance(selected, RoutingAlgorithm):
+            chosen = selected.value
+        else:
+            chosen = str(selected)
+
+        co_algo = (
+            RoutingAlgorithm.A_STAR.value
+            if chosen == RoutingAlgorithm.DIJKSTRA.value
+            else RoutingAlgorithm.DIJKSTRA.value
+        )
+
+        # Dominant highway classification weighted by road distance
+        hw_dist: dict[str, float] = defaultdict(float)
+        for st in d_res.steps:
+            hw_dist[st.highway_type] += st.distance_m
+        dominant_hw = max(hw_dist.items(), key=lambda x: x[1])[0] if hw_dist else "local"
+
+        node_red = (
+            1.0 - (a_res.nodes_visited / d_res.nodes_visited)
+            if d_res.nodes_visited > 0
+            else 0.0
+        )
+        speedup = (
+            d_res.execution_time_ms / max(0.0001, a_res.execution_time_ms)
+            if a_res.execution_time_ms > 0
+            else 1.0
+        )
+        detour = d_res.total_distance_m / max(1.0, straight_m) if d_res.total_distance_m > 0 else 1.0
+
+        return {
+            "source_lat": source_lat,
+            "source_lon": source_lon,
+            "target_lat": target_lat,
+            "target_lon": target_lon,
+            "source_node": source_node,
+            "target_node": target_node,
+            "weight_mode": weight,
+            "straight_line_distance_m": round(straight_m, 2),
+            "selected_algorithm": chosen,
+            "co_algorithm": co_algo,
+            "dijkstra": d_res,
+            "a_star": a_res,
+            "exact_path_parity": (d_res.node_path == a_res.node_path),
+            "cost_delta_s": round(abs(d_res.total_duration_s - a_res.total_duration_s), 6),
+            "distance_delta_m": round(abs(d_res.total_distance_m - a_res.total_distance_m), 4),
+            "node_reduction_ratio": round(node_red, 4),
+            "speedup_factor": round(speedup, 4),
+            "road_detour_factor": round(detour, 4),
+            "dominant_highway_type": dominant_hw,
+        }

@@ -117,3 +117,105 @@ class HybridRecommenderEngine:
         ]
 
         return results, chosen_algorithm
+
+    def compare_algorithms(
+        self,
+        baskets: list[Basket] | list[set[int]],
+        target_product_ids: Sequence[int] | None = None,
+        available_product_ids: Sequence[int] | None = None,
+        limit: int = 6,
+        selected: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Executes a comprehensive side-by-side comparison of Apriori and FP-Growth
+        on the exact same basket corpus and shopping context, alternating order
+        to eliminate memory allocator / cache warm-up bias.
+        """
+        chosen = self.select_algorithm(selected)
+        co_algo = "fpgrowth" if chosen == "apriori" else "apriori"
+
+        if random.random() < 0.5:
+            mine_a = self.mine(baskets, algorithm="apriori")
+            mine_f = self.mine(baskets, algorithm="fpgrowth")
+        else:
+            mine_f = self.mine(baskets, algorithm="fpgrowth")
+            mine_a = self.mine(baskets, algorithm="apriori")
+
+        recs_a, _ = self.recommend(
+            baskets=baskets,
+            target_product_ids=target_product_ids,
+            available_product_ids=available_product_ids,
+            limit=limit,
+            algorithm="apriori",
+        )
+        recs_f, _ = self.recommend(
+            baskets=baskets,
+            target_product_ids=target_product_ids,
+            available_product_ids=available_product_ids,
+            limit=limit,
+            algorithm="fpgrowth",
+        )
+
+        def _rule_stats(rules: list[Rule]) -> dict[str, float]:
+            if not rules:
+                return {
+                    "avg_confidence": 0.0,
+                    "avg_lift": 0.0,
+                    "max_lift": 0.0,
+                    "avg_leverage": 0.0,
+                    "avg_conviction": 0.0,
+                    "avg_zhang": 0.0,
+                    "avg_kulczynski": 0.0,
+                    "avg_imbalance": 0.0,
+                }
+            n = len(rules)
+            return {
+                "avg_confidence": round(sum(r.confidence for r in rules) / n, 4),
+                "avg_lift": round(sum(r.lift for r in rules) / n, 4),
+                "max_lift": round(max(r.lift for r in rules), 4),
+                "avg_leverage": round(sum(r.leverage for r in rules) / n, 5),
+                "avg_conviction": round(sum(r.conviction for r in rules) / n, 4),
+                "avg_zhang": round(sum(r.zhang for r in rules) / n, 4),
+                "avg_kulczynski": round(sum(r.kulczynski for r in rules) / n, 4),
+                "avg_imbalance": round(sum(r.imbalance for r in rules) / n, 4),
+            }
+
+        itemsets_a = set((mine_a.itemsets or {}).keys())
+        itemsets_f = set((mine_f.itemsets or {}).keys())
+        itemset_parity = (itemsets_a == itemsets_f)
+
+        rules_sig_a = {(r.antecedent, r.consequent) for r in mine_a.rules}
+        rules_sig_f = {(r.antecedent, r.consequent) for r in mine_f.rules}
+        rule_parity = (rules_sig_a == rules_sig_f)
+
+        top_a = [r.product_id for r in recs_a]
+        top_f = [r.product_id for r in recs_f]
+        union_set = set(top_a) | set(top_f)
+        jaccard = (len(set(top_a) & set(top_f)) / len(union_set)) if union_set else 1.0
+        exact_rank = (top_a == top_f)
+
+        rule_matched_a = sum(1 for r in recs_a if r.reason.startswith("Frequently bought"))
+        rule_matched_f = sum(1 for r in recs_f if r.reason.startswith("Frequently bought"))
+
+        ms_a = mine_a.timings_ms.get("total_ms", 0.0)
+        ms_f = mine_f.timings_ms.get("total_ms", 0.0)
+        speedup = ms_a / max(0.0001, ms_f) if ms_f > 0 else 1.0
+
+        return {
+            "corpus_basket_count": mine_a.quality.kept,
+            "selected_algorithm": chosen,
+            "co_algorithm": co_algo,
+            "apriori_mining": mine_a,
+            "fpgrowth_mining": mine_f,
+            "apriori_stats": _rule_stats(mine_a.rules),
+            "fpgrowth_stats": _rule_stats(mine_f.rules),
+            "apriori_top_ids": top_a,
+            "fpgrowth_top_ids": top_f,
+            "apriori_rule_matched": rule_matched_a,
+            "fpgrowth_rule_matched": rule_matched_f,
+            "itemset_parity": itemset_parity,
+            "rule_parity": rule_parity,
+            "top_k_jaccard_overlap": round(jaccard, 4),
+            "top_k_exact_rank_match": exact_rank,
+            "speedup_factor": round(speedup, 4),
+        }
