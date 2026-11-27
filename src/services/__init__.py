@@ -11,9 +11,11 @@ from .notification_service import NotificationService
 from .order_service import OrderService
 from .payment_service import PaymentService
 from .refund_service import RefundService
+from .review_service import ReviewService
 from .rider_service import RiderService
 from .user_service import UserService
 from .verification_service import VerificationService
+from .wishlist_service import WishlistService
 
 __all__ = [
     "AddressService",
@@ -27,7 +29,9 @@ __all__ = [
     "OrderService",
     "PaymentService",
     "RefundService",
+    "ReviewService",
     "RiderService",
     "UserService",
     "VerificationService",
+    "WishlistService",
 ]

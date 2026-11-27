@@ -642,10 +642,9 @@ class DeliveryService:
         refreshed = await self.deliveries.get_by_id(delivery.id)
         return refreshed or delivery
 
-    async def pick_up(self, delivery_id: int, rider_user: User, pickup_code: str) -> Delivery:
-        delivery, _ = await self._my_delivery(delivery_id, rider_user)
+    async def _complete_pickup(self, delivery: Delivery, pickup_code: str, actor_id: int) -> Delivery:
         if delivery.status is not DeliveryStatus.ACCEPTED:
-            raise BusinessRuleError("Accept the delivery first")
+            raise BusinessRuleError("Delivery must be accepted by a rider before pickup")
 
         if delivery.pickup_attempts >= self.settings.pickup_max_attempts:
             raise BusinessRuleError("Too many wrong pickup codes. Contact dispatch")
@@ -660,12 +659,12 @@ class DeliveryService:
 
         order = await self.orders.get_locked(delivery.order_id)
         if order.status in (OrderStatus.CONFIRMED, OrderStatus.PREPARING):
-            await self.orders.prepare_for_pickup(order, actor_id=rider_user.id)
+            await self.orders.prepare_for_pickup(order, actor_id=actor_id)
         if order.status is not OrderStatus.READY:
             raise BusinessRuleError("The order is not ready for pickup")
 
         now = utc_now()
-        await self.orders.advance(order, OrderStatus.OUT_FOR_DELIVERY, actor_id=rider_user.id, note="left the shop")
+        await self.orders.advance(order, OrderStatus.OUT_FOR_DELIVERY, actor_id=actor_id, note="left the shop")
         delivery.status = DeliveryStatus.PICKED_UP
         delivery.picked_up_at = now
         delivery.pickup_due_at = None
@@ -682,8 +681,29 @@ class DeliveryService:
             message="Your rider has collected your order from Bansi Mega Supermarket and is on the way.",
             order_id=order.id,
         )
+        if delivery.rider_id:
+            rider = await self.db.get(Rider, delivery.rider_id)
+            if rider is not None:
+                self.notifications.stage(
+                    user_id=rider.user_id,
+                    title=f"Store Handover Verified • {order.order_number}",
+                    message="Pickup verified. Proceed along the route to the customer.",
+                    notif_type="delivery",
+                    action_type="delivery",
+                    action_payload=str(delivery.id),
+                )
         await self.db.commit()
         return delivery
+
+    async def pick_up(self, delivery_id: int, rider_user: User, pickup_code: str) -> Delivery:
+        delivery, _ = await self._my_delivery(delivery_id, rider_user)
+        return await self._complete_pickup(delivery, pickup_code, rider_user.id)
+
+    async def verify_store_pickup(self, delivery_id: int, pickup_code: str, operator: User) -> Delivery:
+        delivery = await self.deliveries.get_locked(delivery_id)
+        if delivery is None:
+            raise NotFoundError("Delivery not found")
+        return await self._complete_pickup(delivery, pickup_code, operator.id)
 
     async def arrive(self, delivery_id: int, rider_user: User) -> Delivery:
         delivery, _ = await self._my_delivery(delivery_id, rider_user)

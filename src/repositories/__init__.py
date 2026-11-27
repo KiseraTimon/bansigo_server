@@ -15,6 +15,7 @@ from .review_repository import ReviewRepository
 from .staff_repository import StaffRepository
 from .token_repository import VerificationTokenRepository
 from .user_repository import UserRepository
+from .wishlist_repository import WishlistRepository
 
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "StockMovementRepository",
     "UserRepository",
     "VerificationTokenRepository",
+    "WishlistRepository",
 ]

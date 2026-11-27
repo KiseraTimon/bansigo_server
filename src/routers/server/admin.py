@@ -1,12 +1,14 @@
 # src/routers/server/admin.py
 
 """
-administrative console router for store managers (admin) and business owners (superadmin).
-serves server-rendered Jinja2 views and operational AJAX endpoints.
+administrative console router for Superadmin (Owner), Operations, Finance, Inventory, and Support roles.
+serves server-rendered Jinja2 views and operational AJAX endpoints with strict RBAC enforcement.
 all endpoints are excluded from openapi documentation schemas to prevent attacker discovery.
 """
 
 from decimal import Decimal
+import json
+import re
 from typing import Annotated, Optional
 
 from fastapi import (
@@ -14,37 +16,57 @@ from fastapi import (
     UploadFile, status,
 )
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import Settings, get_settings
-from src.database import get_db
+from config import Settings
 from src.dependencies import (
     CurrentAdmin, DbSession, SettingsDep, get_admin_service, get_auth_service,
-    get_catalogue_service, get_current_admin, get_delivery_service, require_admin_level,
+    get_catalogue_service, get_delivery_service, get_inventory_service,
+    get_order_service, get_payment_service, get_refund_service, require_admin_level,
 )
 from src.exceptions import AppError, ForbiddenError, InvalidCredentialsError, NotFoundError, UnauthorizedError
 from src.helpers import (
     export_products_to_csv, generate_sample_csv_template, import_products_from_csv, import_products_from_excel,
 )
 from src.models import (
-    Admin, AdminLevel, ApprovalStatus, Inventory, Product, TaxClass, UnitType, User, UserRole,
+    Admin, AdminLevel, ApprovalStatus, Customer, Inventory, PickStatus,
+    StaffPosition, TaxClass, UnitType, UserRole,
 )
 from src.repositories import AdminRepository, ProductRepository, UserRepository
-from src.schemas import ProductCreate, ProductUpdate
-from src.services import AdminService, AuthService, AuditService, CatalogueService, DeliveryService
+from src.schemas import PickItemIn, ProductCreate, ProductUpdate
+from src.services import (
+    AdminService, AuthService, AuditService, CatalogueService, DeliveryService,
+    InventoryService, OrderService, PaymentService, RefundService,
+)
 from utilities import get_logger
 
 log = get_logger(__name__)
 
 router = APIRouter(include_in_schema=False)
 
+CatalogueAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER, AdminLevel.OPERATIONS, AdminLevel.INVENTORY))]
+OpsAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER, AdminLevel.OPERATIONS))]
+DispatchAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER, AdminLevel.OPERATIONS, AdminLevel.SUPPORT))]
+FinanceAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER, AdminLevel.FINANCE))]
+SupportAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER, AdminLevel.OPERATIONS, AdminLevel.SUPPORT))]
+SuperAdminDep = Annotated[tuple, Depends(require_admin_level(AdminLevel.SUPER))]
+
 
 def _admin_base_url(settings: Settings) -> str:
     path = getattr(settings, "admin_portal_path", "console-hq").strip("/")
     return f"/{path}/admin"
 
+
+def _parse_gallery_images(gallery_images: Optional[str]) -> list[str]:
+    if not gallery_images:
+        return []
+    try:
+        data = json.loads(gallery_images)
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip()]
+    except Exception:
+        pass
+    return [img.strip() for img in gallery_images.split(",") if img.strip()]
 
 
 @router.get("", response_class=HTMLResponse)
@@ -56,17 +78,10 @@ async def admin_dashboard_view(
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
 ):
     """
-    main admin dashboard
-    :param request: Request
-    :param settings: Settings
-    :param db: AsyncSession
-    :param admin_service: AdminService
-    :return:
+    role-aware administrative dashboard view
     """
-
     base_url = _admin_base_url(settings)
 
-    # authentication via session cookie or bearer token
     token = None
     auth_header = request.headers.get("authorization")
     if auth_header and auth_header.lower().startswith("bearer "):
@@ -87,7 +102,6 @@ async def admin_dashboard_view(
 
         admin = await AdminRepository(db).get_by_user_id(user.id)
         if not admin:
-            # first admin is a superadmin by default
             admin = Admin(user_id=user.id, level=AdminLevel.SUPER)
             db.add(admin)
             await db.commit()
@@ -96,18 +110,23 @@ async def admin_dashboard_view(
     except Exception:
         return RedirectResponse(url=f"{base_url}/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # assembling data for dashboard
-    summary = await admin_service.get_dashboard_summary()
-    products_list = await admin_service.get_products_data(limit=100)
-    actors = await admin_service.get_actors_data(current_admin_user_id=user.id)
-    security = admin_service.get_security_posture()
-    reviews = await admin_service.get_reviews_summary()
-    audits = await admin_service.get_audit_trail(limit=30)
-    catalogue_options = await admin_service.get_catalogue_form_options()
-    dispatch_data = await admin_service.get_dispatch_queue_data()
-
     admin_level_str = admin.level.value if hasattr(admin.level, "value") else str(admin.level)
     is_superadmin = (admin.level == AdminLevel.SUPER)
+    role_config = admin_service.get_role_workspace_config(admin.level)
+    allowed_tabs = set(role_config["allowed_tabs"])
+
+    summary = await admin_service.get_dashboard_summary(admin_level=admin.level)
+    security = admin_service.get_security_posture()
+    reviews = await admin_service.get_reviews_summary()
+
+    products_list = await admin_service.get_products_data(limit=150) if ({"products", "inventory"} & allowed_tabs) else []
+    catalogue_options = await admin_service.get_catalogue_form_options() if ({"products", "inventory"} & allowed_tabs) else {"categories": [], "brands": []}
+    actors = await admin_service.get_actors_data(current_admin_user_id=user.id) if "actors" in allowed_tabs else {"staff": [], "riders": [], "admins": [], "customers": []}
+    dispatch_data = await admin_service.get_dispatch_queue_data() if "dispatch" in allowed_tabs else {"deliveries": [], "eligible_riders": [], "zones": []}
+    orders_data = await admin_service.get_orders_data(limit=80) if "orders" in allowed_tabs else {"orders": []}
+    finance_data = await admin_service.get_finance_data(limit=60) if "finance" in allowed_tabs else {"payments": [], "payment_events": [], "refunds": [], "rider_payouts": []}
+    inventory_data = await admin_service.get_inventory_data(limit=80) if "inventory" in allowed_tabs else {"movements": [], "suppliers": []}
+    audits = await admin_service.get_audit_trail(limit=50) if "audit" in allowed_tabs else []
 
     return request.app.state.templates.TemplateResponse(
         request,
@@ -117,8 +136,13 @@ async def admin_dashboard_view(
             "admin_profile": admin,
             "admin_level": admin_level_str,
             "is_superadmin": is_superadmin,
+            "role_config": role_config,
+            "allowed_tabs": allowed_tabs,
             "base_url": base_url,
             "summary": summary,
+            "orders_data": orders_data,
+            "finance_data": finance_data,
+            "inventory_data": inventory_data,
             "dispatch_data": dispatch_data,
             "products": products_list,
             "categories": catalogue_options.get("categories", []),
@@ -127,6 +151,8 @@ async def admin_dashboard_view(
             "security": security,
             "reviews": reviews,
             "audits": audits,
+            "staff_positions": [p.value for p in StaffPosition],
+            "admin_levels": [lvl.value for lvl in AdminLevel],
             "current_admin_user_id": user.id,
         },
     )
@@ -134,21 +160,11 @@ async def admin_dashboard_view(
 
 @router.get("/login", response_class=HTMLResponse)
 async def admin_login_view(request: Request, settings: SettingsDep):
-    """
-    admin login page
-    :param request: Reques
-    :param settings: Settings
-    :return:
-    """
-
     base_url = _admin_base_url(settings)
     return request.app.state.templates.TemplateResponse(
         request,
         "admin/login.html",
-        {
-            "base_url": base_url,
-            "app_name": settings.app_name,
-        },
+        {"base_url": base_url, "app_name": settings.app_name},
     )
 
 
@@ -161,24 +177,12 @@ async def admin_login_action(
     username: str = Form(...),
     password: str = Form(...),
 ):
-    """
-    admin login request
-    :param request: Request
-    :param settings: Settings
-    :param db: AsyncSession
-    :param auth_service: AuthService
-    :param username: str
-    :param password: str
-    :return:
-    """
-
     base_url = _admin_base_url(settings)
     try:
         user = await auth_service.authenticate(username, password)
         if user.role != UserRole.ADMIN:
             raise ForbiddenError("Access denied: Administrative privileges required")
 
-        # ensuring the admin row exists
         admin = await AdminRepository(db).get_by_user_id(user.id)
         if not admin:
             admin = Admin(user_id=user.id, level=AdminLevel.SUPER)
@@ -187,7 +191,6 @@ async def admin_login_action(
 
         token = auth_service.issue_token(user)
 
-        # checking request source (ajax vs form)
         is_ajax = "application/json" in request.headers.get("accept", "")
         if is_ajax:
             response = Response(
@@ -224,21 +227,18 @@ async def admin_login_action(
 @router.get("/logout")
 @router.post("/logout")
 async def admin_logout_action(settings: SettingsDep):
-    """
-    admin logout
-    :param settings: Settings
-    :return:
-    """
-
     base_url = _admin_base_url(settings)
     response = RedirectResponse(url=f"{base_url}/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie("access_token")
     return response
 
 
+# ---------------------------------------------------------------------------
+# PRODUCTS & CATALOGUE MANAGEMENT
+# ---------------------------------------------------------------------------
 @router.post("/products")
 async def add_product(
-    admin_ctx: CurrentAdmin,
+    admin_ctx: CatalogueAdminDep,
     catalogue_service: Annotated[CatalogueService, Depends(get_catalogue_service)],
     db: DbSession,
     category_id: int = Form(...),
@@ -259,45 +259,10 @@ async def add_product(
     initial_stock: Decimal = Form(Decimal("0")),
     reorder_level: Decimal = Form(Decimal("0")),
 ):
-    """
-    admin route to add a product
-    :param admin_ctx: CurrentAdmin
-    :param catalogue_service: CatalogueService
-    :param db: AsyncSession
-    :param category_id: int
-    :param brand_id: int | None
-    :param sku: str
-    :param barcode: str | None
-    :param name: str
-    :param description: str | None
-    :param image_url: str | None
-    :param gallery_images: str | None
-    :param unit: str
-    :param pack_size_label: str | None
-    :param price: Decimal
-    :param compare_at_price: Decimal | None
-    :param cost_price: Decimal | None
-    :param tax_class: str
-    :param is_age_restricted: bool
-    :param initial_stock: Decimal
-    :param reorder_level: Decimal
-    :return:
-    """
-
-    import json
     user, _ = admin_ctx
     unit_enum = UnitType(unit) if unit in [u.value for u in UnitType] else UnitType.PIECE
     tax_enum = TaxClass(tax_class) if tax_class in [t.value for t in TaxClass] else TaxClass.STANDARD
-
-    parsed_gallery: list[str] = []
-    if gallery_images:
-        try:
-            data = json.loads(gallery_images)
-            if isinstance(data, list):
-                parsed_gallery = [str(x).strip() for x in data if str(x).strip()]
-        except Exception:
-            parsed_gallery = [img.strip() for img in gallery_images.split(",") if img.strip()]
-
+    parsed_gallery = _parse_gallery_images(gallery_images)
     primary_image = image_url.strip() if image_url else (parsed_gallery[0] if parsed_gallery else None)
 
     prod_in = ProductCreate(
@@ -320,12 +285,9 @@ async def add_product(
 
     created_prod = await catalogue_service.create_product(prod_in, actor_id=user.id)
 
-    # setting a default initial stock if provided
     if initial_stock > 0 or reorder_level > 0:
         inv = (
-            await db.execute(
-                select(Inventory).where(Inventory.product_id == created_prod.id)
-            )
+            await db.execute(select(Inventory).where(Inventory.product_id == created_prod.id))
         ).scalar_one_or_none()
         if inv:
             inv.quantity_on_hand = initial_stock
@@ -338,7 +300,7 @@ async def add_product(
 @router.patch("/products/{product_id}")
 async def update_product(
     product_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: CatalogueAdminDep,
     catalogue_service: Annotated[CatalogueService, Depends(get_catalogue_service)],
     db: DbSession,
     name: Optional[str] = Form(None),
@@ -360,91 +322,43 @@ async def update_product(
     quantity_on_hand: Optional[Decimal] = Form(None),
     reorder_level: Optional[Decimal] = Form(None),
 ):
-    """
-    admin route to update a product
-    :param product_id: int
-    :param admin_ctx: CurrentAdmin
-    :param catalogue_service: CatalogueService
-    :param db: AsyncSession
-    :param name: str | None
-    :param category_id: int | None
-    :param brand_id: int | None
-    :param sku: str | None
-    :param barcode: str | None
-    :param unit: str | None
-    :param pack_size_label: str | None
-    :param price: Decimal | None
-    :param compare_at_price: Decimal | None
-    :param cost_price: Decimal | None
-    :param tax_class: str | None
-    :param is_active: bool | None
-    :param is_age_restricted: bool | None
-    :param image_url: str | None
-    :param gallery_images: str | None
-    :param description: str | None
-    :param quantity_on_hand: Decimal | None
-    :param reorder_level: Decimal | None
-    :return:
-    """
-
-    import json
     user, _ = admin_ctx
     update_data: dict = {}
 
     if gallery_images is not None:
-        parsed_gallery: list[str] = []
-        try:
-            data = json.loads(gallery_images)
-            if isinstance(data, list):
-                parsed_gallery = [str(x).strip() for x in data if str(x).strip()]
-        except Exception:
-            parsed_gallery = [img.strip() for img in gallery_images.split(",") if img.strip()]
+        parsed_gallery = _parse_gallery_images(gallery_images)
         update_data["gallery_images"] = parsed_gallery
         if parsed_gallery and not image_url:
             update_data["image_url"] = parsed_gallery[0]
 
     if name is not None:
         update_data["name"] = name.strip()
-
     if category_id is not None:
         update_data["category_id"] = category_id
-
     if brand_id is not None:
         update_data["brand_id"] = brand_id
-
     if sku is not None:
         update_data["sku"] = sku.strip().upper()
-
     if barcode is not None:
         update_data["barcode"] = barcode.strip() or None
-
     if unit is not None:
         update_data["unit"] = UnitType(unit)
-
     if pack_size_label is not None:
         update_data["pack_size_label"] = pack_size_label.strip() or None
-
     if price is not None:
         update_data["price"] = price
-
     if compare_at_price is not None:
         update_data["compare_at_price"] = compare_at_price
-
     if cost_price is not None:
         update_data["cost_price"] = cost_price
-
     if tax_class is not None:
         update_data["tax_class"] = TaxClass(tax_class)
-
     if is_active is not None:
         update_data["is_active"] = is_active
-
     if is_age_restricted is not None:
         update_data["is_age_restricted"] = is_age_restricted
-
     if image_url is not None:
         update_data["image_url"] = image_url.strip() or None
-
     if description is not None:
         update_data["description"] = description.strip() or None
 
@@ -452,12 +366,9 @@ async def update_product(
         patch_in = ProductUpdate(**update_data)
         await catalogue_service.update_product(product_id, patch_in, actor_id=user.id)
 
-    # updating inventory if supplied
     if quantity_on_hand is not None or reorder_level is not None:
         inv = (
-            await db.execute(
-                select(Inventory).where(Inventory.product_id == product_id)
-            )
+            await db.execute(select(Inventory).where(Inventory.product_id == product_id))
         ).scalar_one_or_none()
         if inv:
             if quantity_on_hand is not None:
@@ -472,19 +383,10 @@ async def update_product(
 @router.post("/products/{product_id}/toggle-status")
 async def toggle_product_status(
     product_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: CatalogueAdminDep,
     catalogue_service: Annotated[CatalogueService, Depends(get_catalogue_service)],
     db: DbSession,
 ):
-    """
-    admin route to edit product status
-    :param product_id: int
-    :param admin_ctx: CurrentAdmin
-    :param catalogue_service: CatalogueService
-    :param db: AsyncSession
-    :return:
-    """
-
     user, _ = admin_ctx
     product = await ProductRepository(db).get_by_id(product_id)
     if not product:
@@ -500,34 +402,15 @@ async def toggle_product_status(
 @router.post("/products/{product_id}/delete")
 async def delete_product(
     product_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: CatalogueAdminDep,
     catalogue_service: Annotated[CatalogueService, Depends(get_catalogue_service)],
 ):
-    """
-    admin route to delete a product
-    :param product_id: int
-    :param admin_ctx: CurrentAdmin
-    :param catalogue_service: CatalogueService
-    :return:
-    """
-
     user, _ = admin_ctx
     return await catalogue_service.delete_product(product_id, actor_id=user.id)
 
 
-
 @router.get("/products/export")
-async def export_products_csv(
-    _: CurrentAdmin,
-    db: DbSession,
-):
-    """
-    bulk export of products catalogue into a CSV
-    :param _: CurrentAdmin
-    :param db: AsyncSession
-    :return:
-    """
-
+async def export_products_csv(_: CurrentAdmin, db: DbSession):
     csv_content = await export_products_to_csv(db)
     return PlainTextResponse(
         content=csv_content,
@@ -537,15 +420,7 @@ async def export_products_csv(
 
 
 @router.get("/products/template")
-async def download_csv_template(
-    _: CurrentAdmin,
-):
-    """
-    route to download the products upload template
-    :param _: CurrentAdmin
-    :return:
-    """
-
+async def download_csv_template(_: CurrentAdmin):
     template_content = generate_sample_csv_template()
     return PlainTextResponse(
         content=template_content,
@@ -556,7 +431,7 @@ async def download_csv_template(
 
 @router.post("/products/bulk-upload")
 async def bulk_upload_products_csv(
-    admin_ctx: CurrentAdmin,
+    admin_ctx: CatalogueAdminDep,
     db: DbSession,
     file: UploadFile = File(...),
 ):
@@ -567,7 +442,7 @@ async def bulk_upload_products_csv(
         report = await import_products_from_excel(content_bytes, actor_id=user.id, db=db)
     else:
         try:
-            csv_text = content_bytes.decode("utf-8-sig")  # Handles Excel UTF-8 BOM
+            csv_text = content_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
             csv_text = content_bytes.decode("latin-1")
         report = await import_products_from_csv(csv_text, actor_id=user.id, db=db)
@@ -575,7 +450,263 @@ async def bulk_upload_products_csv(
 
 
 # ---------------------------------------------------------------------------
-# SYSTEM ACTORS REGULATION (Staff, Riders, Admins)
+# INVENTORY, STOCK MOVEMENTS & SUPPLIERS
+# ---------------------------------------------------------------------------
+@router.post("/inventory/{product_id}/receive")
+async def admin_receive_stock(
+    product_id: int,
+    admin_ctx: CatalogueAdminDep,
+    inventory_service: Annotated[InventoryService, Depends(get_inventory_service)],
+    quantity: Decimal = Form(...),
+    supplier_id: Optional[int] = Form(None),
+    unit_cost: Optional[Decimal] = Form(None),
+    note: Optional[str] = Form(None),
+):
+    user, _ = admin_ctx
+    inv = await inventory_service.receive(
+        product_id, quantity, actor_id=user.id, supplier_id=supplier_id, unit_cost=unit_cost, note=note
+    )
+    return {"detail": f"Received {quantity} units into stock (On Hand: {inv.quantity_on_hand})"}
+
+
+@router.post("/inventory/{product_id}/stock-take")
+async def admin_stock_take(
+    product_id: int,
+    admin_ctx: CatalogueAdminDep,
+    inventory_service: Annotated[InventoryService, Depends(get_inventory_service)],
+    counted: Decimal = Form(...),
+    note: Optional[str] = Form(None),
+):
+    user, _ = admin_ctx
+    inv = await inventory_service.stock_take(product_id, counted, actor_id=user.id, note=note)
+    return {"detail": f"Stock count reconciled to {inv.quantity_on_hand}"}
+
+
+@router.post("/inventory/{product_id}/write-off")
+async def admin_write_off_stock(
+    product_id: int,
+    admin_ctx: CatalogueAdminDep,
+    inventory_service: Annotated[InventoryService, Depends(get_inventory_service)],
+    quantity: Decimal = Form(...),
+    note: str = Form(...),
+):
+    user, _ = admin_ctx
+    inv = await inventory_service.write_off(product_id, quantity, actor_id=user.id, note=note)
+    return {"detail": f"Wrote off {quantity} units (Remaining: {inv.quantity_on_hand})"}
+
+
+@router.post("/inventory/{product_id}/reorder")
+async def admin_set_reorder_level(
+    product_id: int,
+    admin_ctx: CatalogueAdminDep,
+    inventory_service: Annotated[InventoryService, Depends(get_inventory_service)],
+    reorder_level: Decimal = Form(...),
+    reorder_quantity: Optional[Decimal] = Form(None),
+):
+    inv = await inventory_service.set_reorder(product_id, reorder_level, reorder_quantity)
+    return {"detail": f"Reorder threshold updated to {inv.reorder_level}"}
+
+
+@router.post("/suppliers")
+async def admin_create_supplier(
+    admin_ctx: CatalogueAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    name: str = Form(...),
+    contact_name: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    kra_pin: Optional[str] = Form(None),
+    payment_terms_days: int = Form(0),
+):
+    user, _ = admin_ctx
+    sup = await admin_service.create_supplier(
+        name=name,
+        contact_name=contact_name,
+        phone=phone,
+        email=email,
+        kra_pin=kra_pin,
+        payment_terms_days=payment_terms_days,
+        actor_id=user.id,
+    )
+    return {"detail": f"Supplier '{sup.name}' added", "supplier_id": sup.id}
+
+
+@router.post("/suppliers/{supplier_id}/toggle-status")
+async def admin_toggle_supplier(
+    supplier_id: int,
+    admin_ctx: CatalogueAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+):
+    user, _ = admin_ctx
+    sup = await admin_service.toggle_supplier_active(supplier_id, actor_id=user.id)
+    return {"detail": f"Supplier '{sup.name}' is now {'active' if sup.is_active else 'inactive'}"}
+
+
+# ---------------------------------------------------------------------------
+# ORDERS & FULFILMENT WORKFLOW
+# ---------------------------------------------------------------------------
+@router.get("/orders/{order_id}")
+async def admin_get_order_detail(
+    order_id: int,
+    _: CurrentAdmin,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+):
+    return await admin_service.get_order_detail(order_id)
+
+
+@router.post("/orders/{order_id}/start-picking")
+async def admin_start_order_picking(
+    order_id: int,
+    admin_ctx: OpsAdminDep,
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+):
+    user, _ = admin_ctx
+    order = await order_service.start_picking(order_id, actor=user)
+    return {"detail": f"Order #{order.order_number} moved to PREPARING", "status": order.status.value}
+
+
+@router.post("/orders/{order_id}/items/{item_id}/pick")
+async def admin_pick_order_item(
+    order_id: int,
+    item_id: int,
+    admin_ctx: OpsAdminDep,
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+    pick_status: str = Form(...),
+    quantity_picked: Decimal = Form(...),
+    substitute_product_id: Optional[int] = Form(None),
+):
+    user, _ = admin_ctx
+    try:
+        ps = PickStatus(pick_status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid pick status")
+
+    order = await order_service.record_pick(
+        order_id,
+        item_id,
+        PickItemIn(
+            pick_status=ps,
+            quantity_picked=quantity_picked,
+            substitute_product_id=substitute_product_id,
+        ),
+        actor=user,
+    )
+    return {"detail": f"Line item updated on Order #{order.order_number}"}
+
+
+@router.post("/orders/{order_id}/finish-picking")
+async def admin_finish_order_picking(
+    order_id: int,
+    admin_ctx: OpsAdminDep,
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+    delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
+):
+    user, _ = admin_ctx
+    order = await order_service.finish_picking(order_id, actor=user)
+    if order.delivery is not None and order.delivery.rider_id is None:
+        await delivery_service.try_auto_dispatch(order.delivery.id, dispatcher=user)
+    return {"detail": f"Order #{order.order_number} packed & READY", "status": order.status.value}
+
+
+@router.post("/orders/{order_id}/complete-pickup")
+async def admin_complete_pickup_order(
+    order_id: int,
+    admin_ctx: OpsAdminDep,
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+):
+    user, _ = admin_ctx
+    order = await order_service.mark_completed_pickup(order_id, actor=user)
+    return {"detail": f"Click & Collect Order #{order.order_number} completed", "status": order.status.value}
+
+
+@router.post("/orders/{order_id}/cancel")
+async def admin_cancel_order(
+    order_id: int,
+    admin_ctx: SupportAdminDep,
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+    reason: str = Form(...),
+):
+    user, _ = admin_ctx
+    order = await order_service.cancel_by_staff(order_id, actor=user, reason=reason.strip())
+    return {"detail": f"Order #{order.order_number} cancelled and reserved stock released", "status": order.status.value}
+
+
+# ---------------------------------------------------------------------------
+# FINANCE, PAYMENTS & REFUNDS (MAKER-CHECKER)
+# ---------------------------------------------------------------------------
+@router.post("/finance/orders/{order_id}/confirm-manual")
+async def admin_confirm_manual_payment(
+    order_id: int,
+    admin_ctx: FinanceAdminDep,
+    payment_service: Annotated[PaymentService, Depends(get_payment_service)],
+    order_service: Annotated[OrderService, Depends(get_order_service)],
+    db: DbSession,
+    transaction_code: str = Form(...),
+):
+    user, _ = admin_ctx
+    order = await order_service.get_for_staff(order_id)
+    customer = await db.get(Customer, order.customer_id)
+    if customer is None:
+        raise NotFoundError("Order customer not found")
+    await payment_service.confirm_manual_mpesa(
+        customer=customer,
+        user=user,
+        order_id=order_id,
+        transaction_code=transaction_code.strip().upper(),
+    )
+    return {"detail": f"Order #{order.order_number} reconciled with M-Pesa receipt {transaction_code.strip().upper()}"}
+
+
+@router.post("/finance/refunds")
+async def admin_request_refund(
+    admin_ctx: FinanceAdminDep,
+    refund_service: Annotated[RefundService, Depends(get_refund_service)],
+    payment_id: int = Form(...),
+    reason: str = Form(...),
+    amount: Optional[Decimal] = Form(None),
+):
+    user, _ = admin_ctx
+    refund = await refund_service.request_manual(payment_id, amount, reason.strip(), actor=user)
+    return {"detail": f"Refund #{refund.id} staged for maker-checker approval", "refund_id": refund.id}
+
+
+@router.post("/finance/refunds/{refund_id}/approve")
+async def admin_approve_refund(
+    refund_id: int,
+    admin_ctx: FinanceAdminDep,
+    refund_service: Annotated[RefundService, Depends(get_refund_service)],
+):
+    user, _ = admin_ctx
+    refund = await refund_service.approve(refund_id, approver=user)
+    return {"detail": f"Refund #{refund.id} approved for disbursement"}
+
+
+@router.post("/finance/refunds/{refund_id}/reject")
+async def admin_reject_refund(
+    refund_id: int,
+    admin_ctx: FinanceAdminDep,
+    refund_service: Annotated[RefundService, Depends(get_refund_service)],
+    reason: str = Form(...),
+):
+    user, _ = admin_ctx
+    refund = await refund_service.reject(refund_id, approver=user, reason=reason.strip())
+    return {"detail": f"Refund #{refund.id} rejected"}
+
+
+@router.post("/finance/refunds/{refund_id}/settle")
+async def admin_settle_refund(
+    refund_id: int,
+    admin_ctx: FinanceAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    receipt: str = Form(...),
+):
+    user, _ = admin_ctx
+    refund = await admin_service.settle_approved_refund(refund_id, actor=user, receipt=receipt)
+    return {"detail": f"Refund #{refund.id} settled with receipt {refund.provider_receipt}"}
+
+
+# ---------------------------------------------------------------------------
+# SYSTEM ACTORS REGULATION & ONBOARDING (Staff, Riders, Admins, Customers)
 # ---------------------------------------------------------------------------
 @router.get("/actors/riders/{rider_id}")
 async def get_rider_submission_detail(
@@ -589,9 +720,9 @@ async def get_rider_submission_detail(
 @router.post("/actors/riders/{rider_id}/vet")
 async def vet_rider(
     rider_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: OpsAdminDep,
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
-    action: str = Form(...),  # approve, reject, suspend
+    action: str = Form(...),
 ):
     user, _ = admin_ctx
     status_map = {
@@ -608,10 +739,42 @@ async def vet_rider(
     return {"detail": f"Rider vetting updated to {new_status.value}", "rider_id": rider.id}
 
 
+@router.post("/actors/staff")
+async def create_staff_member(
+    admin_ctx: OpsAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    username: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
+    employee_number: str = Form(...),
+    position: str = Form(...),
+):
+    user, _ = admin_ctx
+    try:
+        pos_enum = StaffPosition(position.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid staff position")
+    staff = await admin_service.create_staff_account(
+        first_name=first_name,
+        last_name=last_name,
+        username=username,
+        email=email,
+        phone=phone,
+        password=password,
+        employee_number=employee_number,
+        position=pos_enum,
+        actor_user_id=user.id,
+    )
+    return {"detail": f"Staff member {staff.employee_number} created", "staff_id": staff.id}
+
+
 @router.post("/actors/staff/{staff_id}/toggle-duty")
 async def toggle_staff_duty(
     staff_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: OpsAdminDep,
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
 ):
     user, _ = admin_ctx
@@ -619,21 +782,48 @@ async def toggle_staff_duty(
     return {"detail": f"Staff member on-duty status: {staff.is_on_duty}", "is_on_duty": staff.is_on_duty}
 
 
+@router.post("/actors/admins")
+async def create_admin_account(
+    admin_ctx: SuperAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    username: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
+    level: str = Form(...),
+):
+    _, actor_admin = admin_ctx
+    try:
+        level_enum = AdminLevel(level.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid admin level")
+
+    admin = await admin_service.create_admin_account(
+        first_name=first_name,
+        last_name=last_name,
+        username=username,
+        email=email,
+        phone=phone,
+        password=password,
+        level=level_enum,
+        actor_admin=actor_admin,
+    )
+    return {"detail": f"Administrator created with {admin.level.value.upper()} privileges", "admin_id": admin.id}
+
+
 @router.patch("/actors/admins/{target_admin_id}/level")
 async def update_admin_level(
     target_admin_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: SuperAdminDep,
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
-    new_level: str = Form(...),  # super, operations, finance
+    new_level: str = Form(...),
 ):
     _, actor_admin = admin_ctx
-    level_map = {
-        "super": AdminLevel.SUPER,
-        "operations": AdminLevel.OPERATIONS,
-        "finance": AdminLevel.FINANCE,
-    }
-    level_enum = level_map.get(new_level.lower())
-    if not level_enum:
+    try:
+        level_enum = AdminLevel(new_level.lower())
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid admin level")
 
     admin = await admin_service.set_admin_level(target_admin_id, level_enum, actor_admin=actor_admin)
@@ -643,12 +833,29 @@ async def update_admin_level(
 @router.post("/actors/users/{user_id}/toggle-status")
 async def toggle_user_active(
     user_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: SupportAdminDep,
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
 ):
     _, actor_admin = admin_ctx
     user = await admin_service.toggle_user_active(user_id, actor_admin=actor_admin)
     return {"detail": f"User account active status: {user.is_active}", "is_active": user.is_active}
+
+
+# ---------------------------------------------------------------------------
+# REVIEWS MODERATION
+# ---------------------------------------------------------------------------
+@router.post("/reviews/{review_id}/toggle-publish")
+async def toggle_review_visibility(
+    review_id: int,
+    admin_ctx: SupportAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+):
+    user, _ = admin_ctx
+    review = await admin_service.toggle_review_publish(review_id, actor_id=user.id)
+    return {
+        "detail": f"Review #{review.id} is now {'published' if review.is_published else 'hidden'}",
+        "is_published": review.is_published,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -660,9 +867,6 @@ async def request_two_factor(
     settings: SettingsDep,
     db: DbSession,
 ):
-    """
-    generates and sends a 2FA OTP code to the logged-in administrator via email
-    """
     user, _ = admin_ctx
     from src.services.verification_service import VerificationService
     from utilities.mail import Mailer
@@ -684,8 +888,6 @@ async def request_two_factor(
     )
     await db.commit()
 
-    # Extract OTP code from mail body for dev/test verification
-    import re
     match = re.search(r"\b(\d{4,8})\b", mail.body)
     issued_code = match.group(1) if match else None
 
@@ -706,9 +908,6 @@ async def confirm_two_factor(
     db: DbSession,
     code: str = Form(...),
 ):
-    """
-    verifies OTP and enables 2FA for the administrator account
-    """
     user, _ = admin_ctx
     from src.services.verification_service import VerificationService
 
@@ -734,9 +933,6 @@ async def disable_two_factor(
     settings: SettingsDep,
     db: DbSession,
 ):
-    """
-    disables 2FA on the administrator account
-    """
     user, _ = admin_ctx
     from src.services.verification_service import VerificationService
 
@@ -758,7 +954,7 @@ async def disable_two_factor(
 
 @router.post("/security/settings")
 async def update_security_settings(
-    admin_ctx: CurrentAdmin,
+    admin_ctx: SuperAdminDep,
     settings: SettingsDep,
     db: DbSession,
     access_tokens_expire_minutes: Optional[int] = Form(None),
@@ -773,9 +969,7 @@ async def update_security_settings(
     mpesa_stk_window_seconds: Optional[int] = Form(None),
     log_level: Optional[str] = Form(None),
 ):
-    user, admin = admin_ctx
-    if admin.level != AdminLevel.SUPER:
-        raise ForbiddenError("Only Superadministrators can alter security and system policies")
+    user, _ = admin_ctx
 
     before = {
         "access_tokens_expire_minutes": settings.access_tokens_expire_minutes,
@@ -791,7 +985,6 @@ async def update_security_settings(
         "log_level": settings.log_level,
     }
 
-    # Update runtime settings
     if access_tokens_expire_minutes is not None and access_tokens_expire_minutes > 0:
         settings.access_tokens_expire_minutes = access_tokens_expire_minutes
     if require_verified_email is not None:
@@ -844,7 +1037,7 @@ async def update_security_settings(
 
 
 # ---------------------------------------------------------------------------
-# ADMINISTRATOR PERSONAL ACCOUNT SETTINGS (PROTECTED SELF-MANAGEMENT)
+# ADMINISTRATOR PERSONAL ACCOUNT SETTINGS
 # ---------------------------------------------------------------------------
 @router.post("/account/profile")
 async def update_admin_personal_profile(
@@ -856,10 +1049,6 @@ async def update_admin_personal_profile(
     phone: str = Form(...),
     picture: Optional[str] = Form(None),
 ):
-    """
-    updates the logged-in administrator's personal profile details.
-    self-deactivation, deletion, and role adjustments are strictly prevented.
-    """
     user, _ = admin_ctx
     updated_user = await admin_service.update_admin_profile(
         user_id=user.id,
@@ -886,9 +1075,6 @@ async def change_admin_personal_password(
     new_password: str = Form(...),
     new_password_confirm: str = Form(...),
 ):
-    """
-    updates administrator password after verifying current credentials
-    """
     user, _ = admin_ctx
     await admin_service.change_admin_password(
         user=user,
@@ -900,12 +1086,12 @@ async def change_admin_personal_password(
 
 
 # ---------------------------------------------------------------------------
-# STORE OPERATOR DISPATCH & MANUAL RIDER ASSIGNMENT
+# STORE OPERATOR DISPATCH, DELIVERY ZONES & MANUAL RIDER ASSIGNMENT
 # ---------------------------------------------------------------------------
 @router.post("/deliveries/{delivery_id}/auto-dispatch")
 async def admin_auto_dispatch_delivery(
     delivery_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: DispatchAdminDep,
     delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
 ):
     user, _ = admin_ctx
@@ -923,7 +1109,7 @@ async def admin_auto_dispatch_delivery(
 @router.post("/deliveries/{delivery_id}/assign")
 async def admin_manual_assign_delivery(
     delivery_id: int,
-    admin_ctx: CurrentAdmin,
+    admin_ctx: DispatchAdminDep,
     delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
     rider_id: int = Form(...),
 ):
@@ -937,8 +1123,54 @@ async def admin_manual_assign_delivery(
 
 @router.post("/deliveries/sweep")
 async def admin_sweep_delivery_timers(
-    admin_ctx: CurrentAdmin,
+    admin_ctx: DispatchAdminDep,
     delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
 ):
     stats = await delivery_service.sweep_delivery_timers()
     return {"detail": "Delivery SLA & offer timer sweep completed", "stats": stats}
+
+
+@router.post("/deliveries/{delivery_id}/verify-pickup")
+async def admin_verify_store_pickup(
+    delivery_id: int,
+    admin_ctx: OpsAdminDep,
+    delivery_service: Annotated[DeliveryService, Depends(get_delivery_service)],
+    pickup_code: str = Form(...),
+):
+    user, _ = admin_ctx
+    delivery = await delivery_service.verify_store_pickup(delivery_id, pickup_code, user)
+    return {
+        "detail": f"Pickup code verified for Delivery #{delivery.id}. Order handed over to rider.",
+        "status": delivery.status.value,
+    }
+
+
+@router.post("/dispatch/zones")
+async def admin_create_delivery_zone(
+    admin_ctx: OpsAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    name: str = Form(...),
+    delivery_fee: Decimal = Form(...),
+    min_order_amount: Decimal = Form(Decimal("0.00")),
+    estimated_minutes: int = Form(25),
+):
+    user, _ = admin_ctx
+    zone = await admin_service.create_delivery_zone(
+        name=name,
+        delivery_fee=delivery_fee,
+        min_order_amount=min_order_amount,
+        estimated_minutes=estimated_minutes,
+        actor_id=user.id,
+    )
+    return {"detail": f"Delivery zone '{zone.name}' created", "zone_id": zone.id}
+
+
+@router.post("/dispatch/zones/{zone_id}/toggle-status")
+async def admin_toggle_delivery_zone(
+    zone_id: int,
+    admin_ctx: OpsAdminDep,
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+):
+    user, _ = admin_ctx
+    zone = await admin_service.toggle_delivery_zone(zone_id, actor_id=user.id)
+    return {"detail": f"Zone '{zone.name}' is now {'active' if zone.is_active else 'paused'}"}

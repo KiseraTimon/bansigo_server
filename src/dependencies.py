@@ -18,7 +18,8 @@ from src.repositories import AdminRepository, CustomerRepository, RiderRepositor
 from src.security import decode_access_token
 from src.services import (
     AddressService, AdminService, AuthService, CatalogueService, DeliveryService, InventoryService,
-    NotificationService, OrderService, PaymentService, RefundService, RiderService, UserService, VerificationService,
+    NotificationService, OrderService, PaymentService, RefundService, ReviewService, RiderService,
+    UserService, VerificationService, WishlistService,
 )
 
 from utilities import Mailer, MpesaClient
@@ -84,6 +85,14 @@ def get_admin_service(settings: SettingsDep, db: DbSession) -> AdminService:
 
 def get_notification_service(db: DbSession) -> NotificationService:
     return NotificationService(db)
+
+
+def get_wishlist_service(db: DbSession) -> WishlistService:
+    return WishlistService(db)
+
+
+def get_review_service(db: DbSession) -> ReviewService:
+    return ReviewService(db)
 
 
 def get_road_router():

@@ -28,7 +28,7 @@ from config import Settings
 from src.exceptions import AppError, BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
 from src.models import (
     Customer, Delivery, DeliveryStatus, FulfilmentType, Order, OrderItem, OrderPaymentStatus, OrderStatus,
-    OrderStatusHistory, PaymentMethod, PickStatus, RiderStatus, TaxClass, User,
+    OrderStatusHistory, PaymentMethod, PickStatus, RiderStatus, TaxClass, User, UserRole,
 )
 from src.repositories import (
     DeliveryRepository, OrderRepository, ProductRepository, RiderRepository, StaffRepository, AddressRepository, DeliveryZoneRepository,
@@ -493,14 +493,14 @@ class OrderService:
         return count
 
 
-    # picking (staff)
+    # picking (staff or admin)
     async def start_picking(self, order_id: int, actor: User) -> Order:
         order = await self.get_locked(order_id)
         picker = await self.staff.get_by_user_id(actor.id)
-        if picker is None:
-            raise ForbiddenError("Only staff can pick orders")
+        if picker is None and actor.role is not UserRole.ADMIN:
+            raise ForbiddenError("Only staff or administrators can pick orders")
 
-        order.assigned_picker_id = picker.id
+        order.assigned_picker_id = picker.id if picker is not None else None
         await self._move(order, OrderStatus.PREPARING, actor_id=actor.id, note="picking started")
         await self.db.commit()
         return await self.orders.get_full(order_id)

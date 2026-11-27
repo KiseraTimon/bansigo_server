@@ -11,6 +11,7 @@ from src.dependencies import (
     RiderUser,
     get_delivery_service,
     get_notification_service,
+    get_review_service,
     get_rider_service,
 )
 from src.schemas import (
@@ -28,11 +29,12 @@ from src.schemas import (
     RiderLocation,
     RiderNavigationOut,
     RiderOut,
+    RiderReviewsSummaryOut,
     RiderWalletOut,
     RiderWithdrawOut,
     RiderWithdrawRequest,
 )
-from src.services import DeliveryService, NotificationService, RiderService
+from src.services import DeliveryService, NotificationService, ReviewService, RiderService
 from utilities import get_logger
 
 
@@ -45,6 +47,7 @@ router = APIRouter(tags=["rider-deliveries"])
 DeliveryServiceDep = Annotated[DeliveryService, Depends(get_delivery_service)]
 RiderServiceDep = Annotated[RiderService, Depends(get_rider_service)]
 NotificationServiceDep = Annotated[NotificationService, Depends(get_notification_service)]
+ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
 # Profile & availability
@@ -382,3 +385,16 @@ async def mark_all_rider_notifications_read(
 ) -> dict:
     marked = await service.mark_all_read(user.id)
     return {"status": "success", "marked_read": marked}
+
+
+@router.get(
+    "/reviews",
+    response_model=RiderReviewsSummaryOut,
+    status_code=status.HTTP_200_OK,
+    summary="List customer delivery reviews and average rating for the current rider",
+)
+async def get_rider_reviews(
+    user: RiderUser,
+    service: ReviewServiceDep,
+) -> RiderReviewsSummaryOut:
+    return await service.list_for_rider_user(user)

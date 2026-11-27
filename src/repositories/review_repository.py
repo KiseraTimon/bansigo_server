@@ -81,3 +81,112 @@ class ReviewRepository(BaseRepository[Review]):
             "four_star_pct": f"{four_pct}%",
             "critical_pct": f"{crit_pct}%",
         }
+
+    async def list_for_product(self, product_id: int, *, limit: int = 50) -> list[Review]:
+        stmt = (
+            select(Review)
+            .options(*self._FULL)
+            .where(
+                Review.product_id == product_id,
+                Review.target_type == ReviewTargetType.PRODUCT,
+                Review.is_published.is_(True),
+            )
+            .order_by(Review.id.desc())
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_product_rating_stats(self, product_id: int) -> tuple[Optional[Decimal], int]:
+        stmt = select(
+            func.avg(Review.rating),
+            func.count(Review.id),
+        ).where(
+            Review.product_id == product_id,
+            Review.target_type == ReviewTargetType.PRODUCT,
+            Review.is_published.is_(True),
+        )
+        row = (await self.db.execute(stmt)).one()
+        avg_val, count_val = row[0], int(row[1] or 0)
+        if count_val == 0 or avg_val is None:
+            return None, 0
+        return Decimal(str(round(float(avg_val), 2))), count_val
+
+    async def list_for_rider(self, rider_id: int, *, limit: int = 50) -> list[Review]:
+        stmt = (
+            select(Review)
+            .options(*self._FULL)
+            .where(
+                Review.rider_id == rider_id,
+                Review.target_type.in_((ReviewTargetType.RIDER, ReviewTargetType.DELIVERY)),
+                Review.is_published.is_(True),
+            )
+            .order_by(Review.id.desc())
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def get_rider_rating_stats(self, rider_id: int) -> tuple[Optional[Decimal], int]:
+        stmt = select(
+            func.avg(Review.rating),
+            func.count(Review.id),
+        ).where(
+            Review.rider_id == rider_id,
+            Review.target_type.in_((ReviewTargetType.RIDER, ReviewTargetType.DELIVERY)),
+            Review.is_published.is_(True),
+        )
+        row = (await self.db.execute(stmt)).one()
+        avg_val, count_val = row[0], int(row[1] or 0)
+        if count_val == 0 or avg_val is None:
+            return None, 0
+        return Decimal(str(round(float(avg_val), 2))), count_val
+
+    async def list_for_order_by_customer(self, customer_id: int, order_id: int) -> list[Review]:
+        stmt = (
+            select(Review)
+            .options(*self._FULL)
+            .where(Review.customer_id == customer_id, Review.order_id == order_id)
+            .order_by(Review.id.desc())
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def list_by_customer(self, customer_id: int, *, limit: int = 50) -> list[Review]:
+        stmt = (
+            select(Review)
+            .options(*self._FULL)
+            .where(Review.customer_id == customer_id)
+            .order_by(Review.id.desc())
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def find_existing(
+        self,
+        *,
+        customer_id: int,
+        target_type: ReviewTargetType,
+        order_id: Optional[int] = None,
+        product_id: Optional[int] = None,
+        rider_id: Optional[int] = None,
+    ) -> Optional[Review]:
+        stmt = select(Review).options(*self._FULL).where(Review.customer_id == customer_id)
+        if target_type in (ReviewTargetType.RIDER, ReviewTargetType.DELIVERY) and order_id is not None:
+            stmt = stmt.where(
+                Review.order_id == order_id,
+                Review.target_type.in_((ReviewTargetType.RIDER, ReviewTargetType.DELIVERY)),
+            )
+        elif target_type == ReviewTargetType.PRODUCT and product_id is not None:
+            stmt = stmt.where(
+                Review.target_type == ReviewTargetType.PRODUCT,
+                Review.product_id == product_id,
+            )
+            if order_id is not None:
+                stmt = stmt.where(Review.order_id == order_id)
+            else:
+                stmt = stmt.where(Review.order_id.is_(None))
+        else:
+            stmt = stmt.where(Review.target_type == target_type)
+            if order_id is not None:
+                stmt = stmt.where(Review.order_id == order_id)
+            if rider_id is not None:
+                stmt = stmt.where(Review.rider_id == rider_id)
+        return (await self.db.execute(stmt.order_by(Review.id.desc()).limit(1))).scalar_one_or_none()

@@ -203,7 +203,7 @@ class RiderService:
 
         cod_cash_in_hand = sum(
             (
-                d.order.total_amount
+                d.order.total
                 for d in delivered
                 if d.order and d.order.payment_method == PaymentMethod.CASH
                 and d.delivered_at and d.delivered_at.date() == today

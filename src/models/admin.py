@@ -20,6 +20,8 @@ class AdminLevel(enum.Enum):
     SUPER = "super"
     OPERATIONS = "operations"
     FINANCE = "finance"
+    INVENTORY = "inventory"
+    SUPPORT = "support"
 
 
 class Admin(Base, TimestampMixin):

@@ -29,6 +29,11 @@ from .delivery import (
     RiderOut, RiderPublic, RiderWalletOut, RiderWalletTransactionOut, RiderWithdrawOut, RiderWithdrawRequest,
 )
 from .notification import NotificationListOut, NotificationOut
+from .review import (
+    OrderProductReviewItemOut, OrderReviewStatusOut, ProductReviewsSummaryOut,
+    ReviewCreate, ReviewOut, RiderReviewsSummaryOut,
+)
+from .wishlist import WishlistSyncRequest
 
 
 __all__ = [
@@ -58,4 +63,7 @@ __all__ = [
     "RiderAdminOut", "RiderApply", "RiderDecision", "RiderDeliveryDetailOut", "RiderGoStatus", "RiderLocation",
     "RiderNavigationOut", "RiderOut", "RiderPublic",
     "RiderWalletOut", "RiderWalletTransactionOut", "RiderWithdrawOut", "RiderWithdrawRequest",
+    # reviews + wishlist
+    "OrderProductReviewItemOut", "OrderReviewStatusOut", "ProductReviewsSummaryOut",
+    "ReviewCreate", "ReviewOut", "RiderReviewsSummaryOut", "WishlistSyncRequest",
 ]

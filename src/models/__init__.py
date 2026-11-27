@@ -34,6 +34,7 @@ from .payment import (
 )
 from .review import Review, ReviewTargetType
 from .recommendation import RecommendationEvent
+from .wishlist import WishlistItem
 
 
 # exportable
@@ -47,5 +48,5 @@ __all__ = [
     "Payment", "PaymentChannel", "PaymentEvent", "PaymentEventSource", "PaymentStatus",
     "Refund", "RefundStatus", "TokenPurpose", "VerificationToken", "Delivery", "DeliveryStatus",
     "DeliveryOfferAction", "DeliveryOfferEvent", "Notification",
-    "Review", "ReviewTargetType", "RecommendationEvent",
+    "Review", "ReviewTargetType", "RecommendationEvent", "WishlistItem",
 ]
